@@ -6121,7 +6121,7 @@ enum retro_pixel_format
     */
    RETRO_PIXEL_FORMAT_HDR10_2101010 = 4,
 
-   /** 
+   /**
     * @private Defined to ensure that <tt>sizeof(retro_pixel_format) == sizeof(int)</tt>.
 	* Do not use.
 	*/
