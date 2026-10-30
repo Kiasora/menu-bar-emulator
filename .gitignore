@@ -1,0 +1,32 @@
+.DS_Store
+xcuserdata/
+build/
+DerivedData*/
+*.profraw
+*.log
+
+# Separate local projects, release packages, and optional development-only test fixtures
+MenuBarLofi/
+Release/
+LocalTestFixtures/
+
+# Downloaded core sources and builds (build-cores.sh recreates these)
+BuiltCores/
+cores/
+
+# Never commit games, BIOS files, saves, or save states
+*.gb
+*.gbc
+*.gba
+*.nds
+*.srl
+*.rom
+*.sav
+*.srm
+*.dsv
+*.mc
+*.ss*
+*.state*
+*.rtc
+bios*.bin
+firmware.bin
