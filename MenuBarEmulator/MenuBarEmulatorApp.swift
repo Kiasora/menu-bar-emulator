@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let window = FloatingWindow(model: model)
         window.install()
         self.window = window
+        model.updates.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

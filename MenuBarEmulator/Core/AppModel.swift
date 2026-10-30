@@ -21,6 +21,7 @@ final class AppModel {
     let library: Library
     let controls: Controls
     let lofi = LofiPlayer()
+    let updates = UpdateChecker()
     /// The window is up and not covered (set by the window). Unlike `emulator.windowVisible`, never true while hidden.
     var windowOnScreen = false
     let display: Display

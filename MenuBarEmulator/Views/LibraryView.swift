@@ -23,6 +23,10 @@ struct LibraryView: View {
         VStack(spacing: 0) {
             topStrip
             header
+            if let update = model.updates.available {
+                UpdateBanner(updates: model.updates, update: update)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             if model.library.roms.isEmpty {
                 EmptyLibrary(model: model)
             } else {
@@ -229,6 +233,52 @@ private struct SectionTitle: View {
 
     var body: some View {
         Text(text).font(theme.display(15, .bold))
+    }
+}
+
+// MARK: - Update banner
+
+/// "Version 1.1 is out", with Kian's message from update.json and a button to get it.
+private struct UpdateBanner: View {
+    let updates: UpdateChecker
+    let update: UpdateChecker.Update
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(theme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Version \(update.version) is out").font(.system(size: 13, weight: .semibold))
+                if let message = update.message, !message.isEmpty {
+                    Text(message)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(theme.subtext)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 6)
+            Button("Get it") { NSWorkspace.shared.open(updates.link) }
+                .buttonStyle(PillButtonStyle())
+                .focusable(false)
+                .padFocusable("update-get", cornerRadius: 15) { NSWorkspace.shared.open(updates.link) }
+            Button { withAnimation(.snappy) { updates.dismiss() } } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(theme.subtext)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help("Hide until the next version")
+            .accessibilityLabel("Hide update")
+        }
+        .padding(12)
+        .card(14)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 12)
     }
 }
 

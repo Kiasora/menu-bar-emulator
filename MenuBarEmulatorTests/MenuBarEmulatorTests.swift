@@ -1050,6 +1050,9 @@ final class LofiTests: EmulatorTestCase {
     func testPlaysWhenTheUserChose() throws {
         let model = makeModel()
         let emulator = model.emulator
+        let sound = emulator.soundOn // tests share Kian's real settings; he may have the app muted
+        defer { emulator.soundOn = sound }
+        emulator.soundOn = true
         model.windowOnScreen = true
         XCTAssertFalse(model.prefs.lofiOn, "off until you turn it on")
         XCTAssertTrue(model.prefs.lofiSpedUp, "plays while fast-forwarding out of the box")
@@ -1079,8 +1082,6 @@ final class LofiTests: EmulatorTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
         XCTAssertEqual(model.lofi.volume, 0, "and it fades out")
         emulator.fastForward = false
-        let sound = emulator.soundOn
-        defer { emulator.soundOn = sound }
         emulator.soundOn = false
         model.prefs.lofiOn = true
         XCTAssertEqual(model.lofiVolume, 0, "mute silences everything, lo-fi included")
@@ -1459,5 +1460,32 @@ final class DSCursorTests: EmulatorTestCase {
             }
         }
         return count
+    }
+}
+
+final class UpdateCheckerTests: EmulatorTestCase {
+    func testVersionsCompareLikeNumbers() {
+        XCTAssertTrue(UpdateChecker.isNewer("1.1", than: "1.0"))
+        XCTAssertTrue(UpdateChecker.isNewer("1.10", than: "1.9"))
+        XCTAssertTrue(UpdateChecker.isNewer("1.0.1", than: "1.0"))
+        XCTAssertFalse(UpdateChecker.isNewer("1.0", than: "1.0"))
+        XCTAssertFalse(UpdateChecker.isNewer("0.9.10", than: "1.0"))
+    }
+
+    func testBannerShowsForNewerVersionsUntilDismissed() throws {
+        let store = defaults()
+        let checker = UpdateChecker(store: store, current: "1.0")
+        let feed = try JSONDecoder().decode(UpdateChecker.Update.self, from: Data(#"{"version": "1.1", "message": "fixed stuff", "url": "https://ko-fi.com/kian"}"#.utf8))
+        checker.consider(feed)
+        XCTAssertEqual(checker.available?.message, "fixed stuff")
+        XCTAssertEqual(checker.link.absoluteString, "https://ko-fi.com/kian")
+        checker.dismiss()
+        XCTAssertNil(checker.available)
+        checker.consider(feed)
+        XCTAssertNil(checker.available, "stays hidden after dismissing")
+        checker.consider(UpdateChecker.Update(version: "1.2"))
+        XCTAssertNotNil(checker.available, "a newer one shows again")
+        checker.consider(UpdateChecker.Update(version: "1.0"))
+        XCTAssertNil(checker.available, "never for the version you already have")
     }
 }
