@@ -35,7 +35,10 @@ final class UpdateChecker {
     /// `manual` (the Check for Updates button) shows a dismissed version again. `done` gets whether there's a newer
     /// version, or nil if GitHub couldn't be reached.
     func check(manual: Bool = false, done: ((Bool?) -> Void)? = nil) {
-        let request = URLRequest(url: Self.feed, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        // GitHub's CDN keeps the file up to 5 minutes; a fresh query skips that, so announcements show right away.
+        var url = URLComponents(url: Self.feed, resolvingAgainstBaseURL: false)!
+        url.queryItems = [URLQueryItem(name: "t", value: String(Int(Date().timeIntervalSince1970)))]
+        let request = URLRequest(url: url.url!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         nonisolated(unsafe) weak let checker = self // the answer is handed back on the main thread
         URLSession.shared.dataTask(with: request) { data, _, _ in
             let update = data.flatMap { try? JSONDecoder().decode(Update.self, from: $0) }
