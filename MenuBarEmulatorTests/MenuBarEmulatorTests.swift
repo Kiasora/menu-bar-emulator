@@ -1444,6 +1444,19 @@ final class DSCursorTests: EmulatorTestCase {
         emulator.stop()
     }
 
+    /// Homebrew needs the virtual SD card, which melonDS DS only makes when the option is on.
+    func testHomebrewGetsAnSDCard() throws {
+        let library = Library(root: temp.appending(path: "Library"))
+        let emulator = makeEmulator(library)
+        emulator.windowVisible = true
+        emulator.showingGame = true
+        emulator.play(try testROM(Self.ds)) // micrecord is homebrew
+        RunLoop.main.run(until: Date().addingTimeInterval(1))
+        emulator.stop()
+        let card = library.root.appending(path: "Saves/melonDS DS/dldi_sd_card.bin")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: card.path), "no SD card image at \(card.path)")
+    }
+
     static func changedPixels(_ a: CGImage, _ b: CGImage, around center: CGPoint, radius: Int) -> Int {
         func pixels(_ image: CGImage) -> [UInt32] {
             var data = [UInt32](repeating: 0, count: image.width * image.height)
@@ -1487,5 +1500,143 @@ final class UpdateCheckerTests: EmulatorTestCase {
         XCTAssertNotNil(checker.available, "a newer one shows again")
         checker.consider(UpdateChecker.Update(version: "1.0"))
         XCTAssertNil(checker.available, "never for the version you already have")
+    }
+}
+
+final class NewSystemsTests: EmulatorTestCase {
+    /// Each tiny ROM sets the backdrop to red and loops, so a red picture means the core loaded, ran and its pixel
+    /// format was read right.
+    private func assertShowsRed(_ name: String, _ rom: [UInt8]) throws {
+        let url = temp.appending(path: name)
+        try Data(rom).write(to: url)
+        let emulator = makeEmulator()
+        emulator.windowVisible = true
+        emulator.showingGame = true
+        emulator.play(url)
+        XCTAssertNil(emulator.error, name)
+        RunLoop.main.run(until: Date().addingTimeInterval(1.5))
+        let frame = try XCTUnwrap(emulator.frame, name)
+        if let dir = ProcessInfo.processInfo.environment["FRAME_DUMP"] { // debugging aid
+            try? NSBitmapImageRep(cgImage: frame).representation(using: .png, properties: [:])?.write(to: URL(filePath: dir).appending(path: name + ".png"))
+        }
+        var pixel: [UInt8] = [0, 0, 0, 0]
+        let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        context.draw(frame, in: CGRect(x: -CGFloat(frame.width) / 2, y: -CGFloat(frame.height) / 2, width: CGFloat(frame.width), height: CGFloat(frame.height)))
+        XCTAssertGreaterThan(pixel[0], 120, "\(name) red, got \(pixel)")
+        XCTAssertLessThan(pixel[1], 100, "\(name) green, got \(pixel)")
+        XCTAssertLessThan(pixel[2], 100, "\(name) blue, got \(pixel)")
+        emulator.stop()
+    }
+
+    private func put(_ bytes: [UInt8], at offset: Int, in rom: inout [UInt8]) {
+        rom.replaceSubrange(offset..<offset + bytes.count, with: bytes)
+    }
+
+    func testNESBoots() throws {
+        var prg = [UInt8](repeating: 0xEA, count: 0x4000)
+        put([0x78, 0xD8,
+             0x2C, 0x02, 0x20, 0x10, 0xFB, 0x2C, 0x02, 0x20, 0x10, 0xFB, // wait for the PPU to warm up
+             0xA9, 0x3F, 0x8D, 0x06, 0x20, 0xA9, 0x00, 0x8D, 0x06, 0x20, 0xA9, 0x16, 0x8D, 0x07, 0x20, // backdrop = red
+             0xA9, 0x00, 0x8D, 0x06, 0x20, 0x8D, 0x06, 0x20, 0xA9, 0x08, 0x8D, 0x01, 0x20, // background on
+             0x4C, 0x29, 0xC0], at: 0, in: &prg)
+        put([0x00, 0xC0, 0x00, 0xC0, 0x00, 0xC0], at: 0x3FFA, in: &prg)
+        let header: [UInt8] = [0x4E, 0x45, 0x53, 0x1A, 1, 1] + [UInt8](repeating: 0, count: 10)
+        try assertShowsRed("Test.nes", header + prg + [UInt8](repeating: 0, count: 0x2000))
+    }
+
+    func testSNESBoots() throws {
+        var rom = [UInt8](repeating: 0, count: 0x8000)
+        put([0x78, 0x18, 0xFB, 0xA9, 0x80, 0x8D, 0x00, 0x21, 0x9C, 0x21, 0x21, 0xA9, 0x1F, 0x8D, 0x22, 0x21,
+             0x9C, 0x22, 0x21, 0xA9, 0x0F, 0x8D, 0x00, 0x21, 0x80, 0xFE], at: 0, in: &rom)
+        put(Array("TEST                 ".utf8), at: 0x7FC0, in: &rom)
+        put([0x20, 0x00, 0x05, 0x00, 0x01, 0x33, 0x00, 0xFF, 0xFF, 0x00, 0x00], at: 0x7FD5, in: &rom)
+        for vector in stride(from: 0x7FE4, to: 0x8000, by: 2) { put([0x00, 0x80], at: vector, in: &rom) }
+        let sum = rom.reduce(0) { ($0 + Int($1)) & 0xFFFF }
+        put([UInt8((sum ^ 0xFFFF) & 0xFF), UInt8((sum ^ 0xFFFF) >> 8), UInt8(sum & 0xFF), UInt8(sum >> 8)], at: 0x7FDC, in: &rom)
+        try assertShowsRed("Test.sfc", rom)
+    }
+
+    func testGenesisBoots() throws {
+        var rom = [UInt8](repeating: 0, count: 0x10000)
+        put([0x00, 0xFF, 0xFF, 0xFE, 0x00, 0x00, 0x02, 0x00], at: 0, in: &rom)
+        put(Array("SEGA MEGA DRIVE ".utf8), at: 0x100, in: &rom)
+        // clownmdemu picks its color format at the first line, so (like real games) wait a little before the first color.
+        put([0x30, 0x3C, 0x10, 0x00, 0x51, 0xC8, 0xFF, 0xFE, // move.w #$1000,d0 / dbra d0,*
+             0x41, 0xF9, 0x00, 0xC0, 0x00, 0x04, // lea $C00004,a0
+             0x30, 0xBC, 0x80, 0x04, // full colors
+             0x30, 0xBC, 0x81, 0x44, // display on
+             0x30, 0xBC, 0x87, 0x00, // backdrop = color 0
+             0x20, 0xBC, 0xC0, 0x00, 0x00, 0x00, // write color 0
+             0x33, 0xFC, 0x00, 0x0E, 0x00, 0xC0, 0x00, 0x00, // red
+             0x60, 0xFE], at: 0x200, in: &rom)
+        try assertShowsRed("Test.md", rom)
+    }
+
+    private func segaROM(gameGear: Bool) -> [UInt8] {
+        var rom = [UInt8](repeating: 0, count: 0x8000)
+        let color: [UInt8] = gameGear ? [0x3E, 0x20, 0xD3, 0xBF, 0x3E, 0xC0, 0xD3, 0xBF, 0x3E, 0x0F, 0xD3, 0xBE, 0x3E, 0x00, 0xD3, 0xBE]
+                                      : [0x3E, 0x10, 0xD3, 0xBF, 0x3E, 0xC0, 0xD3, 0xBF, 0x3E, 0x03, 0xD3, 0xBE]
+        put([0xF3, 0xED, 0x56,
+             0x3E, 0x04, 0xD3, 0xBF, 0x3E, 0x80, 0xD3, 0xBF, // mode 4
+             0x3E, 0x00, 0xD3, 0xBF, 0x3E, 0x87, 0xD3, 0xBF] // display stays off: all backdrop, sprite color 0
+            + color + [0x18, 0xFE], at: 0, in: &rom)
+        put(Array("TMR SEGA".utf8) + [0, 0, 0, 0, 0, 0, 0, gameGear ? 0x7C : 0x4C], at: 0x7FF0, in: &rom)
+        return rom
+    }
+
+    func testMasterSystemBoots() throws { try assertShowsRed("Test.sms", segaROM(gameGear: false)) }
+    func testGameGearBoots() throws { try assertShowsRed("Test.gg", segaROM(gameGear: true)) }
+
+    func testExtensionsPickTheirSystem() {
+        let pairs: [(String, GameSystem)] = [("a.nes", .nes), ("a.SFC", .snes), ("a.smc", .snes), ("a.md", .md), ("a.gen", .md),
+                                             ("a.sms", .sms), ("a.gg", .gg), ("a.gba", .gba), ("a.nds", .nds)]
+        for (name, system) in pairs { XCTAssertEqual(GameSystem(rom: URL(filePath: "/x/\(name)")), system, name) }
+        XCTAssertNil(GameSystem(rom: URL(filePath: "/x/bios.bin")))
+    }
+}
+
+final class FolderTests: EmulatorTestCase {
+    func testFoldersHoldGamesAndSurviveRelaunch() throws {
+        let root = temp.appending(path: "Library")
+        let library = Library(root: root)
+        library.importFiles(try ["Emerald.gba", "Crystal.gbc", "Mario.nes"].map { try makeFile($0) })
+        let emerald = try XCTUnwrap(library.roms.first { $0.lastPathComponent == "Emerald.gba" })
+        let crystal = try XCTUnwrap(library.roms.first { $0.lastPathComponent == "Crystal.gbc" })
+        library.put(emerald, in: "Pokémon")
+        library.put(crystal, in: "Pokémon")
+
+        let model = makeModel(library: Library(root: root))
+        XCTAssertEqual(model.library.folderNames, ["Pokémon"])
+        XCTAssertEqual(model.visibleROMs.map(\.lastPathComponent), ["Mario.nes"], "games in folders leave the main list")
+        model.openFolder = "Pokémon"
+        XCTAssertEqual(Set(model.visibleROMs.map(\.lastPathComponent)), ["Emerald.gba", "Crystal.gbc"])
+        model.screen = .library
+        model.back()
+        XCTAssertNil(model.openFolder, "Esc leaves the folder")
+        model.filter = .system(.gba)
+        XCTAssertEqual(model.visibleROMs.map(\.lastPathComponent), ["Emerald.gba"], "filters still find foldered games")
+
+        model.library.renameFolder("Pokémon", to: "Pokemon")
+        XCTAssertEqual(model.library.folder(of: emerald), "Pokemon")
+        model.library.put(emerald, in: nil)
+        XCTAssertNil(model.library.folder(of: emerald))
+        model.library.deleteFolder("Pokemon")
+        XCTAssertTrue(model.library.folders.isEmpty)
+        XCTAssertEqual(model.library.roms.count, 3, "deleting a folder keeps its games")
+    }
+}
+
+final class MenuBarIconTests: EmulatorTestCase {
+    func testLockedIconsAskForTheCodeUntilItsEntered() {
+        let model = makeModel()
+        model.chooseMenuBarIcon(.pokeball)
+        XCTAssertEqual(model.prefs.menuBarIcon, .controller, "locked")
+        XCTAssertEqual(model.sheet, .supporter, "shows what a tip unlocks")
+        XCTAssertFalse(model.unlock("nope"))
+        XCTAssertTrue(model.unlock("  support-34ha-l5f4 "), "case and spaces don't matter")
+        model.chooseMenuBarIcon(.pokeball)
+        XCTAssertEqual(model.prefs.menuBarIcon, .pokeball)
+        for icon in MenuBarIcon.choices { XCTAssertNotNil(icon.image(customFile: temp), "\(icon) draws") }
     }
 }

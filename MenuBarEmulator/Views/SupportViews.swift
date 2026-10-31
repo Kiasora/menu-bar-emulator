@@ -161,7 +161,7 @@ struct TipSheet: View {
                     .buttonStyle(PillButtonStyle(large: true))
                     .focusable(false)
                     .padFocusable("tip-go", cornerRadius: 22, action: tip)
-                Text("Opens ko-fi.com/kian, where you can change the amount.")
+                Text("Opens ko-fi.com/kian, where you can change the amount. Every tip comes with a code that unlocks the supporter menu bar icons.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(theme.subtext)
             }
@@ -246,10 +246,148 @@ struct CreditsSheet: View {
                 .help(credit.url)
                 .padFocusable("credit-\(credit.name)", cornerRadius: 13) { NSWorkspace.shared.open(URL(string: credit.url)!) }
             }
-            Text("Game Boy, Game Boy Advance and Nintendo DS are trademarks of Nintendo. This app isn't affiliated with Nintendo and comes with no games: only play games you own.")
+            Text("Game Boy, Game Boy Advance, Nintendo DS, NES and Super Nintendo are trademarks of Nintendo; Genesis, Master System and Game Gear are trademarks of Sega. This app isn't affiliated with Nintendo and comes with no games: only play games you own.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(theme.subtext)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+/// Names a new folder (for the game it was made from) or renames one.
+struct FolderNameSheet: View {
+    let model: AppModel
+    let rom: URL?
+    let folder: String?
+    @State private var name = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        SheetCard(title: folder == nil ? "New Folder" : "Rename Folder", close: { model.sheet = nil }) {
+            TextField("Name, like “Pokémon” or “ROM hacks”", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit(save)
+            HStack {
+                Spacer()
+                Button("Cancel") { model.sheet = nil }
+                    .buttonStyle(PillButtonStyle(kind: .quiet))
+                    .focusable(false)
+                    .keyboardShortcut(.cancelAction)
+                Button(folder == nil ? "Create" : "Rename", action: save)
+                    .buttonStyle(PillButtonStyle())
+                    .focusable(false)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .onAppear {
+            name = folder ?? ""
+            focused = true
+        }
+    }
+
+    private func save() {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        if let folder { model.library.renameFolder(folder, to: trimmed) } else if let rom { model.library.put(rom, in: trimmed) }
+        if model.openFolder == folder, folder != nil { model.openFolder = trimmed }
+        model.sheet = nil
+    }
+}
+
+/// Every menu bar icon, locked ones included, so people see what a tip unlocks.
+struct MenuBarIconPicker: View {
+    let model: AppModel
+    var compact = false
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        let size: CGFloat = compact ? 34 : 44
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: size, maximum: size + 14), spacing: 8)], spacing: 8) {
+            ForEach(MenuBarIcon.allCases) { icon in
+                let locked = !model.prefs.supporter && !icon.isFree
+                let selected = model.prefs.menuBarIcon == icon && !locked
+                Button { model.chooseMenuBarIcon(icon) } label: {
+                    preview(icon)
+                        .frame(width: size, height: size)
+                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(selected ? theme.accent.opacity(0.18) : theme.board))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(selected ? theme.accent : .clear, lineWidth: 2))
+                        .overlay(alignment: .bottomTrailing) {
+                            if locked {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 7.5, weight: .bold))
+                                    .foregroundStyle(theme.subtext)
+                                    .padding(3)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help(locked ? "\(icon.title) (supporters)" : icon.title)
+                .accessibilityLabel(icon.title + (locked ? ", locked" : ""))
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .padFocusable("icon-\(icon.id)", cornerRadius: 11) { model.chooseMenuBarIcon(icon) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func preview(_ icon: MenuBarIcon) -> some View {
+        let locked = !model.prefs.supporter && !icon.isFree
+        if icon == .custom {
+            if let image = icon.image(customFile: model.customIconURL) {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit).padding(10)
+            } else {
+                Image(systemName: "photo.badge.plus").font(.system(size: 15)).foregroundStyle(theme.text.opacity(locked ? 0.45 : 0.9))
+            }
+        } else if let image = icon.image(customFile: model.customIconURL) {
+            Image(nsImage: image).renderingMode(.template).foregroundStyle(theme.text.opacity(locked ? 0.45 : 1))
+        }
+    }
+}
+
+/// Unlocking the supporter icons: what you get, where to tip, and the code box.
+struct SupporterSheet: View {
+    let model: AppModel
+    @Environment(\.theme) private var theme
+    @State private var code = ""
+    @State private var wrong = false
+
+    var body: some View {
+        SheetCard(title: "Supporter Icons", close: { model.sheet = nil }) {
+            Text("Tip any amount on Ko-fi and you get a code. It unlocks every menu bar icon here, plus your own picture.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(theme.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+            MenuBarIconPicker(model: model, compact: true)
+                .allowsHitTesting(false)
+            HStack(spacing: 8) {
+                TextField("Supporter code", text: $code)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(unlock)
+                    .onChange(of: code) { wrong = false }
+                Button("Unlock", action: unlock)
+                    .buttonStyle(PillButtonStyle())
+                    .focusable(false)
+                    .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if wrong {
+                Text("That code didn't work. Check for typos, or message me on Ko-fi.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.bad)
+            }
+            Button {
+                if let url = URL(string: AppInfo.tipURL) { NSWorkspace.shared.open(url) }
+            } label: { Label("Tip on Ko-fi", systemImage: "heart.fill") }
+                .buttonStyle(PillButtonStyle(kind: .secondary))
+                .focusable(false)
+                .tint(Color(hex: 0xFF5A7A))
+                .padFocusable("supporter-tip", cornerRadius: 15) { if let url = URL(string: AppInfo.tipURL) { NSWorkspace.shared.open(url) } }
+        }
+    }
+
+    private func unlock() {
+        if model.unlock(code) { model.sheet = nil } else { wrong = true }
     }
 }

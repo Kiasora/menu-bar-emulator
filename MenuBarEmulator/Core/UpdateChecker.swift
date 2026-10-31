@@ -32,12 +32,19 @@ final class UpdateChecker {
         timer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { _ in checker?.check() }
     }
 
-    func check() {
+    /// `manual` (the Check for Updates button) shows a dismissed version again. `done` gets whether there's a newer
+    /// version, or nil if GitHub couldn't be reached.
+    func check(manual: Bool = false, done: ((Bool?) -> Void)? = nil) {
         let request = URLRequest(url: Self.feed, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         nonisolated(unsafe) weak let checker = self // the answer is handed back on the main thread
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            guard let data, let update = try? JSONDecoder().decode(Update.self, from: data) else { return }
-            DispatchQueue.main.async { checker?.consider(update) }
+            let update = data.flatMap { try? JSONDecoder().decode(Update.self, from: $0) }
+            DispatchQueue.main.async {
+                guard let checker, let update else { done?(nil); return }
+                if manual { checker.store.removeObject(forKey: Self.dismissedKey) }
+                checker.consider(update)
+                done?(checker.available != nil)
+            }
         }.resume()
     }
 

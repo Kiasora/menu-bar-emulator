@@ -120,6 +120,11 @@ final class Covers {
         case .gbc: "Nintendo_-_Game_Boy_Color"
         case .gba: "Nintendo_-_Game_Boy_Advance"
         case .nds: "Nintendo_-_Nintendo_DS"
+        case .nes: "Nintendo_-_Nintendo_Entertainment_System"
+        case .snes: "Nintendo_-_Super_Nintendo_Entertainment_System"
+        case .md: "Sega_-_Mega_Drive_-_Genesis"
+        case .sms: "Sega_-_Master_System_-_Mark_III"
+        case .gg: "Sega_-_Game_Gear"
         }
         // libretro-thumbnails replaces these characters in file names.
         let safe = String(name.map { "&*/:`<>?\\|\"".contains($0) ? "_" : $0 })

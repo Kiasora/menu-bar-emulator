@@ -58,9 +58,6 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
     func install() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            let image = NSImage(systemSymbolName: "gamecontroller.fill", accessibilityDescription: AppInfo.name)
-            image?.isTemplate = true
-            button.image = image
             button.target = self
             button.action = #selector(statusItemClicked)
             button.toolTip = "\(AppInfo.name) (⌥P)"
@@ -73,6 +70,8 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
             button.window?.delegate = iconDrop
         }
         statusItem = item
+        updateIcon()
+        model.prefs.onIconChanged = { [weak self] in self?.updateIcon() }
 
         registerShortcuts()
         model.prefs.onShortcutsChanged = { [weak self] in self?.registerShortcuts() }
@@ -91,6 +90,14 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
         if model.screen == .onboarding {
             DispatchQueue.main.async { self.show(.floating) }
         }
+    }
+
+    /// Your chosen menu bar icon (the controller if it's locked or its picture is gone).
+    func updateIcon() {
+        let prefs = model.prefs
+        let icon = prefs.supporter || prefs.menuBarIcon.isFree ? prefs.menuBarIcon : .controller
+        statusItem?.length = icon == .custom ? NSStatusItem.variableLength : NSStatusItem.squareLength
+        statusItem?.button?.image = icon.image(customFile: model.customIconURL) ?? MenuBarIcon.controller.image(customFile: model.customIconURL)
     }
 
     /// The two global shortcuts from Preferences: pop out (floating) and open under the menu bar icon.
@@ -148,9 +155,10 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
 
     static func defaultScale(for system: GameSystem) -> Double {
         switch system {
-        case .gb, .gbc: 3
+        case .gb, .gbc, .gg: 3
         case .gba: 2
-        case .nds: 1.5
+        case .nds, .nes, .snes, .sms: 1.5
+        case .md: 1.25
         }
     }
 

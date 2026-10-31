@@ -74,7 +74,7 @@ private struct MainSettings: View {
                     }
                     SpeedSlider(emulator: emulator, padID: "ff-speed")
                 }
-                ToggleRow(title: "Rewind", subtitle: "Hold \(key(.rewind)) in Game Boy and GBA games",
+                ToggleRow(title: "Rewind", subtitle: "Hold \(key(.rewind)) in any game but DS",
                           isOn: Binding { emulator.rewindEnabled } set: { emulator.rewindEnabled = $0 }, padID: "rewind")
                 ToggleRow(title: "Sound", subtitle: "Everything, lo-fi too. \(key(.mute)) or the speaker up top mutes it",
                           isOn: Binding { emulator.soundOn } set: { emulator.soundOn = $0 }, padID: "sound")
@@ -168,6 +168,20 @@ private struct MainSettings: View {
                 ThemePicker(model: model, selection: $themeRaw)
             }
 
+            SettingsGroup(title: "Menu bar icon", footer: model.prefs.supporter
+                          ? "Thanks for supporting the app! Click the last one to use any picture."
+                          : "The controller is free. A tip on Ko-fi gets you a code that unlocks the rest, and your own picture.") {
+                MenuBarIconPicker(model: model)
+                if !model.prefs.supporter {
+                    SettingsRow(title: "Got a supporter code?") {
+                        Button("Enter Code") { model.sheet = .supporter }
+                            .buttonStyle(PillButtonStyle(kind: .secondary))
+                            .focusable(false)
+                    }
+                    .padFocusable("enter-code", cornerRadius: 8) { model.sheet = .supporter }
+                }
+            }
+
             SettingsGroup(title: "Library") {
                 SettingsRow(title: "Games, BIOS and saves", subtitle: "Application Support › MenuBarEmulator") {
                     Button("Show") { NSWorkspace.shared.open(model.library.root) }
@@ -190,6 +204,7 @@ private struct MainSettings: View {
             }
 
             SettingsGroup(title: "About") {
+                linkRow("Check for Updates", symbol: "arrow.triangle.2.circlepath", id: "check-updates") { model.checkForUpdates() }
                 linkRow("Welcome Tour", symbol: "sparkles", id: "tour") { model.replayOnboarding() }
                 linkRow("Credits and Licenses", symbol: "doc.text", id: "credits") { model.sheet = .credits }
                 linkRow("Reset to Factory Settings…", symbol: "arrow.counterclockwise", id: "factory-reset", destructive: true) { model.sheet = .reset }

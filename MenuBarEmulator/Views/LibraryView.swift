@@ -11,12 +11,16 @@ struct LibraryView: View {
     @State private var cardFrames: [URL: CGRect] = [:]
 
     /// A game being dragged to a new spot: the card follows the pointer, held where it was grabbed.
+    @State private var folderFrames: [String: CGRect] = [:]
+
     private struct GameDrag {
         let rom: URL
         let grab: CGSize
         let size: CGSize
         var location: CGPoint
         var lifted = true
+        /// The folder it's over, if any.
+        var folder: String?
     }
 
     var body: some View {
@@ -163,10 +167,22 @@ struct LibraryView: View {
     private var grid: some View {
         let roms = model.visibleROMs
         return VStack(alignment: .leading, spacing: 10) {
-            if !model.openGames.isEmpty && model.filter == .all && model.search.isEmpty {
+            if let folder = model.openFolder, model.search.isEmpty {
+                Button { model.openFolder = nil } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left").font(.system(size: 12, weight: .bold))
+                        Image(systemName: "folder.fill").foregroundStyle(theme.accent)
+                        Text(folder).font(theme.display(16, .bold))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Back to all games (Esc)")
+            } else if !model.openGames.isEmpty && model.filter == .all && model.search.isEmpty {
                 SectionTitle(text: "All games")
             }
-            if roms.isEmpty {
+            if roms.isEmpty && !(model.showsFolders && !model.library.folders.isEmpty) {
                 Text(model.search.isEmpty ? "Nothing here yet." : "No games match “\(model.search)”.")
                     .font(.system(size: 13))
                     .foregroundStyle(theme.subtext)
@@ -174,6 +190,13 @@ struct LibraryView: View {
                     .padding(.vertical, 40)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 116, maximum: 170), spacing: 14, alignment: .top)], alignment: .leading, spacing: 18) {
+                if model.showsFolders {
+                    ForEach(model.library.folderNames, id: \.self) { folder in
+                        FolderCard(model: model, folder: folder, dropping: drag?.folder == folder)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("grid")) } action: { folderFrames[folder] = $0 }
+                            .onDisappear { folderFrames[folder] = nil }
+                    }
+                }
                 ForEach(roms, id: \.self) { rom in
                     GameCard(model: model, rom: rom, selected: model.selection == rom)
                         .opacity(drag?.rom == rom ? 0.25 : 1) // its spot, while the lifted copy follows the pointer
@@ -208,6 +231,9 @@ struct LibraryView: View {
             withAnimation(.snappy(duration: 0.2)) { drag = GameDrag(rom: rom, grab: grab, size: frame.size, location: value.location) }
         }
         drag?.location = value.location
+        // Over a folder: dropping puts the game in it.
+        drag?.folder = folderFrames.first { $0.value.insetBy(dx: $0.value.width * 0.1, dy: $0.value.height * 0.1).contains(value.location) }?.key
+        if drag?.folder != nil { return }
         // Take the spot of the game under the pointer. Only a card's middle counts, so it can't flip back and forth on an edge.
         let target = cardFrames.first { other, frame in
             other != rom && frame.insetBy(dx: frame.width * 0.15, dy: frame.height * 0.15).contains(value.location)
@@ -217,6 +243,14 @@ struct LibraryView: View {
 
     /// Settles the card into its new spot, then puts the real one back.
     private func dragEnded() {
+        if let current = drag, let folder = current.folder {
+            withAnimation(.snappy(duration: 0.25)) {
+                model.library.put(current.rom, in: folder)
+                drag = nil
+            }
+            model.show("Moved to \(folder)", "folder.fill")
+            return
+        }
         guard let current = drag, let spot = cardFrames[current.rom] else { drag = nil; return }
         withAnimation(.snappy(duration: 0.22)) {
             drag?.location = CGPoint(x: spot.minX + current.grab.width, y: spot.minY + current.grab.height)
@@ -414,6 +448,17 @@ private struct GameCard: View {
         .contextMenu {
             Button("Play") { model.play(rom) }
             Button(meta.favorite ? "Remove from Favorites" : "Add to Favorites") { model.library.toggleFavorite(rom) }
+            Menu("Move to Folder") {
+                let current = model.library.folder(of: rom)
+                ForEach(model.library.folderNames.filter { $0 != current }, id: \.self) { folder in
+                    Button(folder) { model.library.put(rom, in: folder) }
+                }
+                if model.library.folderNames.contains(where: { $0 != current }) { Divider() }
+                Button("New Folder…") { model.sheet = .folderName(rom: rom, folder: nil) }
+            }
+            if model.library.folder(of: rom) != nil {
+                Button("Remove from Folder") { model.library.put(rom, in: nil) }
+            }
             Divider()
             Button("Choose Picture…") { model.choosePicture(for: rom) }
             if model.covers.hasCustom(rom) { Button("Use Default Picture") { model.covers.removeCustom(rom) } }
@@ -431,6 +476,8 @@ private struct GameCard: View {
     }
 
     private var cover: some View {
+        // A fixed square holds the picture, so wide box art (SNES) can't stretch the card.
+        Color.clear.aspectRatio(1, contentMode: .fit).overlay {
         ZStack {
             if let image = model.covers.image(for: rom) {
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fill).blur(radius: 18).opacity(0.7)
@@ -445,7 +492,7 @@ private struct GameCard: View {
                 Label("Use as picture", systemImage: "photo.badge.plus").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
             }
         }
-        .aspectRatio(1, contentMode: .fit)
+        }
         .background(theme.board)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
@@ -481,6 +528,81 @@ private struct GameCard: View {
     }
 }
 
+/// A folder on the main list: its first four games' pictures, its name and how many games it holds.
+private struct FolderCard: View {
+    let model: AppModel
+    let folder: String
+    let dropping: Bool
+    @Environment(\.theme) private var theme
+    @State private var hovering = false
+
+    var body: some View {
+        let games = model.library.games(in: folder)
+        Button { withAnimation(.snappy(duration: 0.25)) { model.openFolder = folder } } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                Color.clear
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay {
+                        Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+                            ForEach(0..<2, id: \.self) { row in
+                                GridRow {
+                                    ForEach(0..<2, id: \.self) { column in
+                                        let index = row * 2 + column
+                                        Group {
+                                            if index < games.count { thumbnail(games[index]) } else { theme.surface.opacity(0.6) }
+                                        }
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    }
+                                }
+                            }
+                        }
+                        .padding(9)
+                    }
+                .background(theme.board)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(dropping ? theme.accent : .clear, lineWidth: 2.5)
+                }
+                .scaleEffect(hovering || dropping ? 1.04 : 1)
+                .shadow(color: .black.opacity(hovering ? 0.28 : theme.isDark ? 0.2 : 0.1), radius: hovering ? 12 : 5, y: hovering ? 6 : 3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(folder, systemImage: "folder.fill")
+                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(theme.text)
+                        .lineLimit(2)
+                    Text(games.count == 1 ? "1 game" : "\(games.count) games")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(theme.subtext)
+                }
+                .padding(.horizontal, 2)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .onHover { hover in withAnimation(.easeOut(duration: 0.15)) { hovering = hover } }
+        .animation(.easeOut(duration: 0.15), value: dropping)
+        .contextMenu {
+            Button("Open") { model.openFolder = folder }
+            Button("Rename…") { model.sheet = .folderName(rom: nil, folder: folder) }
+            Divider()
+            Button("Delete Folder (keeps the games)", role: .destructive) { model.library.deleteFolder(folder) }
+        }
+        .accessibilityLabel("Folder \(folder), \(games.count) games")
+    }
+
+    @ViewBuilder
+    private func thumbnail(_ rom: URL) -> some View {
+        if let image = model.covers.image(for: rom) {
+            Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+        } else if let system = GameSystem(rom: rom) {
+            CoverFallback(system: system)
+        }
+    }
+}
+
 /// Console drawing on a soft gradient in the console's color, for games without box art.
 struct CoverFallback: View {
     let system: GameSystem
@@ -508,7 +630,7 @@ private struct EmptyLibrary: View {
             FloatingConsoles(size: 70)
             VStack(spacing: 7) {
                 Text("Your games live here").font(theme.display(22, .heavy))
-                Text("Add Game Boy, Game Boy Color, Game Boy Advance\nand DS games. Drop files or a folder anywhere.")
+                Text("Add Game Boy, GBA, DS, NES, SNES, Genesis,\nMaster System and Game Gear games. Drop files or a folder anywhere.")
                     .font(.system(size: 12.5))
                     .foregroundStyle(theme.subtext)
                     .multilineTextAlignment(.center)
@@ -530,7 +652,7 @@ private struct EmptyLibrary: View {
     }
 }
 
-/// The four consoles, gently bobbing out of step. Driven by Core Animation, so it's as smooth as the display
+/// A few of the consoles, gently bobbing out of step. Driven by Core Animation, so it's as smooth as the display
 /// (still with Reduce Motion).
 struct FloatingConsoles: View {
     var size: CGFloat = 70
@@ -539,7 +661,7 @@ struct FloatingConsoles: View {
 
     var body: some View {
         HStack(spacing: size * 0.08) {
-            ForEach(Array(GameSystem.allCases.enumerated()), id: \.element) { index, system in
+            ForEach(Array([GameSystem.gb, .snes, .gba, .md, .nds].enumerated()), id: \.element) { index, system in
                 ConsoleArt(system: system)
                     .frame(width: size, height: size)
                     .offset(y: floating ? -size * 0.06 : size * 0.06)

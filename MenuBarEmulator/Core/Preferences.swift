@@ -39,7 +39,13 @@ final class Preferences {
     /// No sound at all while a game is up: neither the game's nor the lo-fi.
     var silentGames: Bool { didSet { store.set(silentGames, forKey: Keys.silentGames) } }
 
+    /// Tipped on Ko-fi and entered the code: unlocks the menu bar icons.
+    var supporter: Bool { didSet { store.set(supporter, forKey: Keys.supporter) } }
+    /// The menu bar icon. Anything but the controller needs `supporter`.
+    var menuBarIcon: MenuBarIcon { didSet { store.set(menuBarIcon.rawValue, forKey: Keys.menuBarIcon); onIconChanged?() } }
+
     @ObservationIgnored var onShortcutsChanged: (() -> Void)?
+    @ObservationIgnored var onIconChanged: (() -> Void)?
     @ObservationIgnored private let store: UserDefaults
 
     private enum Keys {
@@ -51,6 +57,8 @@ final class Preferences {
         static let lofiSpedUp = "MenuBarEmulator.lofiSpedUp"
         static let lofiInBackground = "MenuBarEmulator.lofiInBackground"
         static let silentGames = "MenuBarEmulator.silentGames"
+        static let supporter = "MenuBarEmulator.supporter"
+        static let menuBarIcon = "MenuBarEmulator.menuBarIcon"
     }
 
     init(store: UserDefaults = .standard) {
@@ -63,6 +71,8 @@ final class Preferences {
         lofiSpedUp = store.object(forKey: Keys.lofiSpedUp) as? Bool ?? true
         lofiInBackground = store.object(forKey: Keys.lofiInBackground) as? Bool ?? false
         silentGames = store.object(forKey: Keys.silentGames) as? Bool ?? false
+        supporter = store.bool(forKey: Keys.supporter)
+        menuBarIcon = store.string(forKey: Keys.menuBarIcon).flatMap(MenuBarIcon.init) ?? .controller
     }
 
     private func save(_ shortcut: Shortcut?, _ key: String) {

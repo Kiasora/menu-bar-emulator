@@ -82,6 +82,8 @@ struct RootView: View {
                 case .credits: CreditsSheet(model: model)
                 case .reset: ResetSheet(model: model)
                 case .themeEditor(let id): ThemeEditor(model: model, editingID: id)
+                case .folderName(let rom, let folder): FolderNameSheet(model: model, rom: rom, folder: folder)
+                case .supporter: SupporterSheet(model: model)
                 }
             }
             .transition(.scale(scale: 0.94).combined(with: .opacity))

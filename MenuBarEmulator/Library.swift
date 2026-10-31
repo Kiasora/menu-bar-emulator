@@ -5,7 +5,7 @@ import Observation
 /// cheats, and per-game stats (favorite, play time, last played). Imported files are copies, so originals can go.
 @Observable
 final class Library {
-    static let romExtensions: Set<String> = ["gb", "gbc", "gba", "nds"]
+    static let romExtensions = Set(GameSystem.allCases.flatMap(\.extensions))
     static let biosExtensions: Set<String> = ["bin", "rom"]
     static let patchExtensions: Set<String> = ["ips", "ups", "bps"]
 
@@ -16,6 +16,8 @@ final class Library {
     private(set) var meta: [String: GameMeta] = [:]
     /// Your own order from dragging games around (file names). Games it doesn't list go after it, A–Z.
     private(set) var order: [String] = []
+    /// Your folders (Pokémon, ROM hacks…), each with the file names of its games. A game is in one folder at most.
+    private(set) var folders: [String: [String]] = [:]
 
     struct GameMeta: Codable, Equatable {
         var favorite = false
@@ -51,6 +53,9 @@ final class Library {
         }
         if let data = try? Data(contentsOf: root.appending(path: "order.json")) {
             order = (try? JSONDecoder().decode([String].self, from: data)) ?? []
+        }
+        if let data = try? Data(contentsOf: root.appending(path: "folders.json")) {
+            folders = (try? JSONDecoder().decode([String: [String]].self, from: data)) ?? [:]
         }
         reload()
     }
@@ -168,6 +173,43 @@ final class Library {
         reload()
     }
 
+    // MARK: Folders
+
+    var folderNames: [String] { folders.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending } }
+
+    func folder(of rom: URL) -> String? { folders.first { $0.value.contains(rom.lastPathComponent) }?.key }
+
+    func games(in folder: String) -> [URL] {
+        let names = Set(folders[folder] ?? [])
+        return roms.filter { names.contains($0.lastPathComponent) }
+    }
+
+    /// Puts `rom` in `folder` (made if it's new), or takes it out of any folder with nil. Emptied folders stay.
+    func put(_ rom: URL, in folder: String?) {
+        let name = rom.lastPathComponent
+        for key in folders.keys { folders[key]?.removeAll { $0 == name } }
+        if let folder = folder?.trimmingCharacters(in: .whitespaces), !folder.isEmpty { folders[folder, default: []].append(name) }
+        saveFolders()
+    }
+
+    func renameFolder(_ old: String, to new: String) {
+        let new = new.trimmingCharacters(in: .whitespaces)
+        guard !new.isEmpty, new != old, let games = folders.removeValue(forKey: old) else { return }
+        folders[new, default: []] += games
+        saveFolders()
+    }
+
+    /// The games go back to the main list; nothing is deleted.
+    func deleteFolder(_ folder: String) {
+        folders[folder] = nil
+        saveFolders()
+    }
+
+    private func saveFolders() {
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try? JSONEncoder().encode(folders).write(to: root.appending(path: "folders.json"), options: .atomic)
+    }
+
     // MARK: Stats
 
     func meta(for rom: URL) -> GameMeta { meta[rom.lastPathComponent] ?? GameMeta() }
@@ -245,14 +287,50 @@ struct Cheat: Codable, Identifiable, Equatable {
     var enabled = true
 }
 
-/// The handheld a ROM is for, from its file extension.
+/// The console a ROM is for, from its file extension. Raw values are saved (window scale per system), so keep them.
 enum GameSystem: String, CaseIterable, Identifiable {
-    case gb, gbc, gba, nds
+    case gb, gbc, gba, nds, nes, snes, md, sms, gg
 
     var id: String { rawValue }
 
     init?(rom: URL) {
-        self.init(rawValue: rom.pathExtension.lowercased())
+        let ext = rom.pathExtension.lowercased()
+        guard let system = Self.allCases.first(where: { $0.extensions.contains(ext) }) else { return nil }
+        self = system
+    }
+
+    /// shortcut: Genesis .bin files aren't picked up (.bin means BIOS here); rename them to .md.
+    var extensions: [String] {
+        switch self {
+        case .snes: ["sfc", "smc"]
+        case .md: ["md", "gen"]
+        default: [rawValue]
+        }
+    }
+
+    /// The libretro core in the app bundle that plays it.
+    var core: String {
+        switch self {
+        case .gb, .gbc, .gba: "mgba"
+        case .nds: "melondsds"
+        case .nes: "fceumm"
+        case .snes: "bsnes"
+        case .md: "clownmdemu"
+        case .sms, .gg: "gearsystem"
+        }
+    }
+
+    /// The picture's size before the core says otherwise.
+    var screenSize: CGSize {
+        switch self {
+        case .gb, .gbc, .gg: CGSize(width: 160, height: 144)
+        case .gba: CGSize(width: 240, height: 160)
+        case .nds: CGSize(width: 256, height: 384)
+        case .nes: CGSize(width: 256, height: 240)
+        case .snes: CGSize(width: 256, height: 224)
+        case .md: CGSize(width: 320, height: 224)
+        case .sms: CGSize(width: 256, height: 192)
+        }
     }
 
     var shortName: String {
@@ -261,6 +339,11 @@ enum GameSystem: String, CaseIterable, Identifiable {
         case .gbc: "GBC"
         case .gba: "GBA"
         case .nds: "DS"
+        case .nes: "NES"
+        case .snes: "SNES"
+        case .md: "Genesis"
+        case .sms: "SMS"
+        case .gg: "GG"
         }
     }
 
@@ -270,6 +353,11 @@ enum GameSystem: String, CaseIterable, Identifiable {
         case .gbc: "Game Boy Color"
         case .gba: "Game Boy Advance"
         case .nds: "Nintendo DS"
+        case .nes: "NES"
+        case .snes: "Super Nintendo"
+        case .md: "Sega Genesis"
+        case .sms: "Sega Master System"
+        case .gg: "Sega Game Gear"
         }
     }
 
@@ -279,6 +367,11 @@ enum GameSystem: String, CaseIterable, Identifiable {
         case .gbc: 0x8E5BD0
         case .gba: 0x5458D8
         case .nds: 0x7A8799
+        case .nes: 0xC0463E
+        case .snes: 0x6E62B0
+        case .md: 0x3D4255
+        case .sms: 0x2F6FB8
+        case .gg: 0x2E9C8F
         }
     }
 }

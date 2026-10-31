@@ -41,14 +41,31 @@ struct GameView: View {
                                     .padding(.horizontal, 8)
                                     .frame(height: 22)
                                     .background(Capsule().fill(.black.opacity(0.55)))
+                                    .allowsHitTesting(false)
                             }
                             Spacer()
-                            if emulator.isRewinding { indicator("Rewinding", "backward.fill") }
-                            if emulator.slowMotion { indicator("Slow motion", "tortoise.fill") }
+                            if emulator.isRewinding { indicator("Rewinding", "backward.fill").allowsHitTesting(false) }
+                            if emulator.slowMotion {
+                                // Easy to turn on by accident (one key), so a click on the badge turns it off.
+                                Button { emulator.slowMotion = false } label: {
+                                    HStack(spacing: 6) {
+                                        Label("Slow motion", systemImage: "tortoise.fill")
+                                        Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).opacity(0.7)
+                                    }
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 26)
+                                    .background(Capsule().fill(.black.opacity(0.6)))
+                                    .contentShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                                .focusable(false)
+                                .help("Back to normal speed (\(model.controls.key(for: .slowMotion)?.name ?? "E"))")
+                            }
                         }
                         .padding(10)
                     }
-                    .allowsHitTesting(false)
 
                     if let panel = model.panel {
                         Color.black.opacity(0.45)
@@ -418,7 +435,7 @@ private struct ControlBar: View {
     }
 }
 
-/// Paused: a big Resume, plus the two things people look for (full screen, settings).
+/// Paused: a big Resume, plus what people look for (full screen, controls, settings).
 private struct PausedOverlay: View {
     let model: AppModel
 
@@ -439,6 +456,7 @@ private struct PausedOverlay: View {
             HStack(spacing: 8) {
                 GlassButton(symbol: model.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
                             label: "Full Screen (⌃⌘F)", size: 30, text: model.isFullScreen ? "Exit Full Screen" : "Full Screen") { model.toggleFullScreen() }
+                GlassButton(symbol: "gamecontroller.fill", label: "Controls (\(model.controls.key(for: .help)?.name ?? "H"))", size: 30, text: "Controls") { model.togglePanel(.help) }
                 GlassButton(symbol: "gearshape.fill", label: "Settings (⌘,)", size: 30, text: "Settings") { model.togglePanel(.settings) }
             }
         }

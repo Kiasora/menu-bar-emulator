@@ -89,7 +89,7 @@ struct OnboardingView: View {
                     .font(theme.display(30, .heavy))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Game Boy, Game Boy Color, Game Boy Advance and DS, living in your menu bar. Click away and your game pauses and saves itself.")
+                Text("Game Boy, GBA, DS, NES, SNES, Genesis and more, living in your menu bar. Click away and your game pauses and saves itself.")
                     .font(.system(size: 13))
                     .foregroundStyle(theme.subtext)
                     .multilineTextAlignment(.center)

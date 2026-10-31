@@ -156,7 +156,7 @@ final class Emulator {
     func play(_ rom: URL) {
         stop()
         error = nil
-        let name = GameSystem(rom: rom) == .nds ? "melondsds" : "mgba"
+        let name = GameSystem(rom: rom)?.core ?? "mgba"
         guard let core = loadCore(name) else { return fail("Couldn't load the \(name) emulator.") }
         // Memory-mapped: big DS ROMs open without copying the whole file first.
         guard let data = try? Data(contentsOf: rom, options: .alwaysMapped) else { return fail("Couldn't read \(rom.lastPathComponent).") }
@@ -166,6 +166,7 @@ final class Emulator {
         turboHeld = []
         pressed = []
         previousPixels = nil
+        pixelFormat = RETRO_PIXEL_FORMAT_0RGB1555.rawValue // libretro's default until the core asks for another
         undoState = nil
         canUndoLoad = false
         optionsChanged = false
@@ -814,7 +815,7 @@ final class Emulator {
             data.assumingMemoryBound(to: UnsafePointer<CChar>?.self).pointee = UnsafePointer(saveDir)
         case RETRO_ENVIRONMENT_SET_PIXEL_FORMAT:
             let format = data.load(as: UInt32.self)
-            guard format == RETRO_PIXEL_FORMAT_XRGB8888.rawValue || format == RETRO_PIXEL_FORMAT_RGB565.rawValue else { return false }
+            guard [RETRO_PIXEL_FORMAT_XRGB8888, RETRO_PIXEL_FORMAT_RGB565, RETRO_PIXEL_FORMAT_0RGB1555].map(\.rawValue).contains(format) else { return false }
             pixelFormat = format
         case RETRO_ENVIRONMENT_GET_LOG_INTERFACE:
             data.assumingMemoryBound(to: retro_log_callback.self).pointee.log = host_log_callback()
@@ -865,6 +866,9 @@ final class Emulator {
         // melonDS DS otherwise draws its own square cursor where the stylus last was, and leaves it there after you let
         // go (unanswered, it falls back to "always"). The app shows its own stylus instead.
         case "melonds_show_cursor": "disabled"
+        // Homebrew DS games need an SD card (DLDI). Unanswered, melonDS DS turns it off; on, it makes
+        // Saves/melonDS DS/dldi_sd_card.bin and mirrors it to the dldi_sd_card folder next to it.
+        case "melonds_homebrew_sdcard": "enabled"
         default: nil
         }
     }
@@ -888,6 +892,13 @@ final class Emulator {
                                         width: vImagePixelCount(width), rowBytes: pitch)
                 var dst = vImage_Buffer(data: base, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: bytesPerRow)
                 vImageConvert_RGB565toBGRA8888(255, &src, &dst, vImage_Flags(kvImageNoFlags))
+            } else if pixelFormat == RETRO_PIXEL_FORMAT_0RGB1555.rawValue { // bsnes never picks a format, so it gets this
+                var src = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: data), height: vImagePixelCount(height),
+                                        width: vImagePixelCount(width), rowBytes: pitch)
+                var dst = vImage_Buffer(data: base, height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: bytesPerRow)
+                vImageConvert_ARGB1555toARGB8888(&src, &dst, vImage_Flags(kvImageNoFlags))
+                let toBGRA: [UInt8] = [3, 2, 1, 0]
+                vImagePermuteChannels_ARGB8888(&dst, &dst, toBGRA, vImage_Flags(kvImageNoFlags))
             } else {
                 for y in 0..<height { (base + y * bytesPerRow).copyMemory(from: data + y * pitch, byteCount: bytesPerRow) }
             }

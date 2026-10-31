@@ -7,7 +7,13 @@ import Observation
 final class AppModel {
     enum Screen: Hashable { case onboarding, library, game, settings }
     enum Panel: Hashable { case menu, states, display, mods, games, help, settings }
-    enum Sheet: Hashable { case feedback, tip, credits, reset, themeEditor(String?) }
+    enum Sheet: Hashable {
+        case feedback, tip, credits, reset, themeEditor(String?)
+        /// Naming a folder: a new one for `rom`, or renaming `folder`.
+        case folderName(rom: URL?, folder: String?)
+        /// Enter the Ko-fi supporter code.
+        case supporter
+    }
     enum SettingsPage: Hashable { case main, controls }
     enum LibraryFilter: Hashable { case all, favorites, system(GameSystem) }
     enum ShortcutSlot: Hashable { case popOut, menuBar }
@@ -38,7 +44,9 @@ final class AppModel {
     var sheet: Sheet?
     var settingsPage: SettingsPage = .main
     var onboardingStep = 0
-    var filter: LibraryFilter = .all
+    var filter: LibraryFilter = .all { didSet { openFolder = nil } }
+    /// The folder you're looking inside, if any.
+    var openFolder: String?
     var search = ""
     var isSearching = false
     /// Highlighted game, moved with the arrow keys or a controller.
@@ -155,7 +163,7 @@ final class AppModel {
     var pictureSize: CGSize {
         guard let system = currentSystem else { return CGSize(width: 240, height: 160) }
         if system == .nds { return display.dsLayout().size }
-        return emulator.frameSize ?? (system == .gba ? CGSize(width: 240, height: 160) : CGSize(width: 160, height: 144))
+        return emulator.frameSize ?? system.screenSize
     }
 
     /// The Separate layout puts the other DS screen in a second window.
@@ -170,8 +178,13 @@ final class AppModel {
     /// Which layer the controller / arrow keys navigate.
     var padScope: String { sheet != nil ? "sheet" : panel != nil ? "panel" : "screen" }
 
+    /// Folders show as their own cards on the main list; filters and search look through every game.
+    var showsFolders: Bool { filter == .all && search.isEmpty && openFolder == nil }
+
     var visibleROMs: [URL] {
-        library.roms.filter { rom in
+        if let openFolder, search.isEmpty { return library.games(in: openFolder) }
+        return library.roms.filter { rom in
+            if showsFolders, library.folder(of: rom) != nil { return false }
             let matches: Bool = switch filter {
             case .all: true
             case .favorites: library.meta(for: rom).favorite
@@ -246,6 +259,8 @@ final class AppModel {
             if isSearching || !search.isEmpty {
                 search = ""
                 isSearching = false
+            } else if openFolder != nil {
+                openFolder = nil
             } else {
                 hideWindow()
             }
@@ -337,6 +352,51 @@ final class AppModel {
         } catch {
             show("Couldn't apply that patch", "exclamationmark.triangle.fill")
         }
+    }
+
+    func checkForUpdates() {
+        show("Checking for updates…", "arrow.triangle.2.circlepath")
+        updates.check(manual: true) { [weak self] newer in
+            guard let self else { return }
+            switch newer {
+            case true?: show("Version \(updates.available?.version ?? "") is out", "sparkles")
+            case false?: show("You're up to date (\(AppInfo.version))", "checkmark.circle.fill")
+            case nil: show("Couldn't check. Are you online?", "wifi.exclamationmark")
+            }
+        }
+    }
+
+    // MARK: Menu bar icon
+
+    var customIconURL: URL { library.root.appending(path: "menu-bar-icon.png") }
+
+    /// Checks a supporter code from Ko-fi; a right one unlocks every menu bar icon.
+    @discardableResult
+    func unlock(_ code: String) -> Bool {
+        guard SupporterCode.isValid(code) else { return false }
+        prefs.supporter = true
+        show("Thank you! Icons unlocked", "heart.fill")
+        return true
+    }
+
+    func chooseMenuBarIcon(_ icon: MenuBarIcon) {
+        guard prefs.supporter || icon.isFree else { sheet = .supporter; return }
+        if icon == .custom { return chooseCustomIcon() }
+        prefs.menuBarIcon = icon
+    }
+
+    /// Your own picture in the menu bar (supporters).
+    func chooseCustomIcon() {
+        guard let file = pickFiles("Choose a picture for the menu bar", Array(Covers.imageExtensions)).first,
+              let image = NSImage(contentsOf: file), let tiff = image.tiffRepresentation,
+              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
+        do {
+            try FileManager.default.createDirectory(at: library.root, withIntermediateDirectories: true)
+            try png.write(to: customIconURL, options: .atomic)
+        } catch {
+            return show("Couldn't use that picture", "exclamationmark.triangle.fill")
+        }
+        if prefs.menuBarIcon == .custom { prefs.onIconChanged?() } else { prefs.menuBarIcon = .custom }
     }
 
     func choosePicture(for rom: URL) {

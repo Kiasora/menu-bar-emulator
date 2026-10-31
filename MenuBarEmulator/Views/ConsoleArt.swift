@@ -14,6 +14,11 @@ struct ConsoleArt: View {
             case .gbc: art.gameBoy(body: 0x7B4BB8, bezel: 0x2C2B33, screen: [0x6FD3E8, 0xF2A6C8], buttons: 0x3A3942, color: true)
             case .gba: art.advance()
             case .nds: art.ds()
+            case .nes: art.nesPad()
+            case .snes: art.snesPad()
+            case .md: art.genesisPad()
+            case .sms: art.masterSystemPad()
+            case .gg: art.gameGear()
             }
         }
         .aspectRatio(1, contentMode: .fit)
@@ -145,6 +150,76 @@ private struct Art {
         circle(79, 68, 2.1, color(0x3A3C46)) // A
         circle(77, 82, 1.1, color(0x3A3C46))
         circle(77, 86, 1.1, color(0x3A3C46))
+    }
+
+    // Home consoles are drawn as their controllers, the part everyone remembers.
+
+    func nesPad() {
+        let b = rect(6, 32, 88, 38)
+        shadow(b, radius: 3)
+        fill(b, gradient(b, 0xD6D4D0, 0xB9B6B1), radius: 3)
+        let face = rect(10, 38, 80, 27)
+        fill(face, color(0x1E1E22), radius: 2)
+        fill(rect(38, 43, 24, 17), color(0xC9C7C3), radius: 1.5)
+        dpad(24, 51.5, 7, 0x2A2A2E)
+        fill(rect(19, 46.5, 10, 10), color(0x2A2A2E))
+        pill(45, 55, 7, 0x2A2A2E)
+        pill(55, 55, 7, 0x2A2A2E)
+        for x in [70.0, 81.0] {
+            fill(rect(x - 5.5, 46, 11, 11), color(0xC9C7C3), radius: 1.5)
+            circle(x, 51.5, 4.2, color(0xD0312D))
+        }
+    }
+
+    func snesPad() {
+        let b = rect(4, 30, 92, 40)
+        shadow(b, radius: 20)
+        fill(rect(12, 28, 22, 6), color(0x9B98A8), radius: 3) // shoulder buttons
+        fill(rect(66, 28, 22, 6), color(0x9B98A8), radius: 3)
+        fill(b, gradient(b, 0xDCDAE4, 0xB7B4C4), radius: 20)
+        circle(24, 50, 11, color(0xC7C4D2))
+        dpad(24, 50, 7, 0x2A2A2E)
+        pill(44, 55, 6, 0x6E6A7E)
+        pill(54, 55, 6, 0x6E6A7E)
+        circle(76, 50, 13, color(0xA7A3B8))
+        circle(76, 42, 3.8, color(0x2F6FD6)) // X
+        circle(76, 58, 3.8, color(0xE5B629)) // B
+        circle(68, 50, 3.8, color(0x3BAA4F)) // Y
+        circle(84, 50, 3.8, color(0xD0312D)) // A
+    }
+
+    func genesisPad() {
+        let b = rect(5, 30, 90, 42)
+        shadow(b, radius: 21)
+        fill(b, gradient(b, 0x3A3B42, 0x1C1C21), radius: 21)
+        circle(25, 51, 12, color(0x2A2B31))
+        dpad(25, 51, 8, 0x111114)
+        fill(rect(45, 40, 10, 3), color(0x4A4B55), radius: 1.5) // Start
+        for (i, x) in [62.0, 73.0, 84.0].enumerated() { circle(x, 58 - Double(i) * 5, 4.4, color(0x111114)) } // A B C
+    }
+
+    func masterSystemPad() {
+        let b = rect(10, 33, 80, 34)
+        shadow(b, radius: 4)
+        fill(b, gradient(b, 0x2C2D33, 0x18181C), radius: 4)
+        fill(rect(14, 37, 72, 26), color(0x23242A), radius: 2)
+        dpad(29, 50, 8.5, 0x0E0E11)
+        circle(64, 53, 5, color(0xB8323A))
+        circle(77, 47, 5, color(0xB8323A))
+    }
+
+    func gameGear() {
+        let b = rect(3, 26, 94, 50)
+        shadow(b, radius: 16)
+        fill(b, gradient(b, 0x34353C, 0x17171B), radius: 16)
+        let bz = rect(28, 31, 44, 37)
+        fill(bz, color(0x0E0E11), radius: 3)
+        let sc = rect(33, 35, 34, 27)
+        fill(sc, gradient(sc, 0x7AD6C6, 0x5A7FE0), radius: 1)
+        dpad(15, 52, 6.5, 0x0E0E11)
+        circle(81, 55, 4, color(0x3F6FD8))
+        circle(89, 49, 4, color(0x3F6FD8))
+        circle(85, 37, 1.6, color(0x0E0E11)) // Start
     }
 
     static func darken(_ hex: UInt32) -> UInt32 {
