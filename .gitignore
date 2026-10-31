@@ -30,3 +30,4 @@ cores/
 *.rtc
 bios*.bin
 firmware.bin
+brag-output/

@@ -346,13 +346,20 @@ private struct ResumeCard: View {
 
     var body: some View {
         Button { model.play(rom) } label: {
+            // Fixed size first, picture behind it: a .fill picture in the stack grew it past the card and pushed the
+            // title and play time out of sight (SNES pictures are squarer than the card).
             ZStack(alignment: .bottomLeading) {
-                Color.black
-                if let thumbnail {
-                    Image(nsImage: thumbnail).resizable().interpolation(.none).aspectRatio(contentMode: .fill)
-                } else if let system = GameSystem(rom: rom) {
-                    CoverFallback(system: system)
-                }
+                Color.clear
+                    .background {
+                        ZStack {
+                            Color.black
+                            if let thumbnail {
+                                Image(nsImage: thumbnail).resizable().interpolation(.none).aspectRatio(contentMode: .fill)
+                            } else if let system = GameSystem(rom: rom) {
+                                CoverFallback(system: system)
+                            }
+                        }
+                    }
                 LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: UnitPoint(x: 0.5, y: 0.3), endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(rom.gameTitle).font(.system(size: 13, weight: .semibold, design: .rounded)).lineLimit(1)
@@ -476,23 +483,32 @@ private struct GameCard: View {
     }
 
     private var cover: some View {
-        // A fixed square holds the picture, so wide box art (SNES) can't stretch the card.
-        Color.clear.aspectRatio(1, contentMode: .fit).overlay {
-        ZStack {
-            if let image = model.covers.image(for: rom) {
-                Image(nsImage: image).resizable().aspectRatio(contentMode: .fill).blur(radius: 18).opacity(0.7)
-                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
-                    .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
-                    .padding(8)
-            } else if let system {
-                CoverFallback(system: system)
+        // The square sets the size; the pictures only fill it. A .fill image inside the layout would grow the card
+        // to its own shape, which blew up wide (SNES) box art and cut its sides off.
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .background {
+                if let image = model.covers.image(for: rom) {
+                    Image(nsImage: image).resizable().aspectRatio(contentMode: .fill).blur(radius: 18).opacity(0.7)
+                } else if let system {
+                    CoverFallback(system: system)
+                }
             }
-            if dropping {
-                Color.black.opacity(0.45)
-                Label("Use as picture", systemImage: "photo.badge.plus").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
+            .overlay {
+                if let image = model.covers.image(for: rom) {
+                    Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+                        .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+                        .padding(8)
+                }
             }
-        }
-        }
+            .overlay {
+                if dropping {
+                    ZStack {
+                        Color.black.opacity(0.45)
+                        Label("Use as picture", systemImage: "photo.badge.plus").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
+                    }
+                }
+            }
         .background(theme.board)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
@@ -596,7 +612,7 @@ private struct FolderCard: View {
     @ViewBuilder
     private func thumbnail(_ rom: URL) -> some View {
         if let image = model.covers.image(for: rom) {
-            Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+            Color.clear.background { Image(nsImage: image).resizable().aspectRatio(contentMode: .fill) } // fills the cell, never resizes it
         } else if let system = GameSystem(rom: rom) {
             CoverFallback(system: system)
         }
