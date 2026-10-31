@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import ServiceManagement
 
 /// How the app behaves (as opposed to how a game runs): window behavior and the global shortcuts.
 /// Picked during onboarding, changeable in Settings.
@@ -19,6 +20,22 @@ final class Preferences {
     var lofiSpedUp: Bool { didSet { store.set(lofiSpedUp, forKey: Keys.lofiSpedUp) } }
     /// Lo-fi keeps playing after the window closes, like a music app.
     var lofiInBackground: Bool { didSet { store.set(lofiInBackground, forKey: Keys.lofiInBackground) } }
+    /// Open at login, through macOS's own Login Items (System Settings › General › Login Items). Its state lives in
+    /// the system, not here, so it always matches what System Settings shows.
+    var openAtLogin = SMAppService.mainApp.status == .enabled {
+        didSet {
+            let app = SMAppService.mainApp
+            guard openAtLogin != (app.status == .enabled) else { return }
+            do {
+                if openAtLogin { try app.register() } else { try app.unregister() }
+            } catch {
+                NSLog("Couldn't change Open at Login: \(error)")
+            }
+            // macOS sometimes wants the user's OK first: take them to the switch.
+            if app.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+            openAtLogin = app.status == .enabled // setting it inside didSet doesn't call didSet again
+        }
+    }
     /// No sound at all while a game is up: neither the game's nor the lo-fi.
     var silentGames: Bool { didSet { store.set(silentGames, forKey: Keys.silentGames) } }
 

@@ -99,6 +99,8 @@ private struct MainSettings: View {
                           isOn: Binding { model.prefs.lofiInBackground } set: { model.prefs.lofiInBackground = $0 }, padID: "lofi-background")
             }
             SettingsGroup(title: "Window") {
+                ToggleRow(title: "Open at login", subtitle: "Starts in the menu bar when you log in to your Mac",
+                          isOn: Binding { model.prefs.openAtLogin } set: { model.prefs.openAtLogin = $0 }, padID: "open-at-login")
                 ToggleRow(title: "Pause when hidden", subtitle: "Off: games keep running while the window is away",
                           isOn: Binding { model.prefs.pauseWhenHidden } set: { model.prefs.pauseWhenHidden = $0 }, padID: "pause-hidden")
                 ToggleRow(title: "Close when I click outside", subtitle: "For the window under the menu bar icon",

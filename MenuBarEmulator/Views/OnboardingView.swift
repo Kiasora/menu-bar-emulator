@@ -178,6 +178,8 @@ struct OnboardingView: View {
                           isOn: Binding { model.prefs.pauseWhenHidden } set: { model.prefs.pauseWhenHidden = $0 }, padID: "pref-pause")
                 ToggleRow(title: "Close when I click somewhere else", subtitle: "Off: the menu bar window stays until you close it",
                           isOn: Binding { model.prefs.closeOnClickOutside } set: { model.prefs.closeOnClickOutside = $0 }, padID: "pref-close")
+                ToggleRow(title: "Open at login", subtitle: "Always there in the menu bar when you start your Mac",
+                          isOn: Binding { model.prefs.openAtLogin } set: { model.prefs.openAtLogin = $0 }, padID: "pref-login")
                 ToggleRow(title: "Lo-fi music", subtitle: "Chill original tracks. Also at the top of the library",
                           isOn: Binding { model.prefs.lofiOn } set: { model.prefs.lofiOn = $0 }, padID: "pref-lofi")
                 ToggleRow(title: "Lo-fi while fast-forwarding", subtitle: "Fills the quiet when you speed a game up",
