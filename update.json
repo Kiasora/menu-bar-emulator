@@ -1,7 +1,7 @@
 {
-  "version": "1.0.5",
-  "message": "one-click updates: after this one, new versions install right from here",
+  "version": "1.1",
+  "message": "save backups, ghost mode, drop a game on the menu bar icon to play it, shuffle, a crt filter and settings in tabs",
   "url": "https://ko-fi.com/kian",
-  "download": "https://github.com/Kiasora/menu-bar-emulator/releases/download/v1.0.5/Menu-Bar-Emulator-1.0.5-macOS.zip",
-  "sha256": "24fd24cd960f56b63ea75fb41f5e1f703d0076c47991d141cee69899f7340444"
+  "download": "https://github.com/Kiasora/menu-bar-emulator/releases/download/v1.1/Menu-Bar-Emulator-1.1-macOS.zip",
+  "sha256": "247994f9b0fea68d9ebdd7267942ce91cf326c952ec8fd1408ba4c960a0695c1"
 }
