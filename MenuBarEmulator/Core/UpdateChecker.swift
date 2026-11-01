@@ -14,7 +14,17 @@ final class UpdateChecker {
         var sha256: String?
     }
 
-    static let feed = URL(string: "https://raw.githubusercontent.com/Kiasora/menu-bar-emulator/main/update.json")!
+    /// Where `update.json` is read from, first one that answers. GitHub's API has it at most a minute old;
+    /// raw.githubusercontent.com keeps it up to 5 minutes whatever the query string, so it's only the backup, for when the
+    /// API's limit (60 checks an hour per network) runs out.
+    static let feeds: [URLRequest] = [
+        "https://api.github.com/repos/Kiasora/menu-bar-emulator/contents/update.json",
+        "https://raw.githubusercontent.com/Kiasora/menu-bar-emulator/main/update.json",
+    ].map { link in
+        var request = URLRequest(url: URL(string: link)!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        request.setValue("application/vnd.github.raw+json", forHTTPHeaderField: "Accept") // the file itself, not JSON about it
+        return request
+    }
     private static let dismissedKey = "MenuBarEmulator.dismissedUpdate"
 
     /// A newer version the user hasn't dismissed yet.
@@ -37,16 +47,15 @@ final class UpdateChecker {
 
     /// `manual` (the Check for Updates button) shows a dismissed version again. `done` gets whether there's a newer
     /// version, or nil if GitHub couldn't be reached.
-    func check(manual: Bool = false, done: ((Bool?) -> Void)? = nil) {
-        // GitHub's CDN keeps the file up to 5 minutes; a fresh query skips that, so announcements show right away.
-        var url = URLComponents(url: Self.feed, resolvingAgainstBaseURL: false)!
-        url.queryItems = [URLQueryItem(name: "t", value: String(Int(Date().timeIntervalSince1970)))]
-        let request = URLRequest(url: url.url!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+    func check(manual: Bool = false, feeds: ArraySlice<URLRequest> = UpdateChecker.feeds[...], done: ((Bool?) -> Void)? = nil) {
+        guard let request = feeds.first else { done?(nil); return }
         nonisolated(unsafe) weak let checker = self // the answer is handed back on the main thread
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            let update = data.flatMap { try? JSONDecoder().decode(Update.self, from: $0) }
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            let answered = (response as? HTTPURLResponse).map { $0.statusCode == 200 } ?? (data != nil) // file: URLs in tests
+            let update = answered ? data.flatMap { try? JSONDecoder().decode(Update.self, from: $0) } : nil
             DispatchQueue.main.async {
-                guard let checker, let update else { done?(nil); return }
+                guard let checker else { done?(nil); return }
+                guard let update else { return checker.check(manual: manual, feeds: feeds.dropFirst(), done: done) } // next source
                 if manual { checker.store.removeObject(forKey: Self.dismissedKey) }
                 checker.consider(update)
                 done?(checker.available != nil)

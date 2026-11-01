@@ -1501,6 +1501,38 @@ final class UpdateCheckerTests: EmulatorTestCase {
         checker.consider(UpdateChecker.Update(version: "1.0"))
         XCTAssertNil(checker.available, "never for the version you already have")
     }
+
+    private func check(_ checker: UpdateChecker, _ feeds: [URLRequest]) -> Bool? {
+        let answered = expectation(description: "answered")
+        var result: Bool??
+        checker.check(feeds: feeds[...]) { newer in
+            result = newer
+            answered.fulfill()
+        }
+        wait(for: [answered], timeout: 30)
+        return result ?? nil
+    }
+
+    func testFallsBackToTheNextSourceAndGivesUpCleanly() throws {
+        let good = temp.appending(path: "update.json")
+        try Data(#"{"version": "9.9", "message": "from the backup"}"#.utf8).write(to: good)
+        let missing = URLRequest(url: temp.appending(path: "missing.json"))
+        let checker = UpdateChecker(store: defaults(), current: "1.0")
+        XCTAssertEqual(check(checker, [missing, URLRequest(url: good)]), true)
+        XCTAssertEqual(checker.available?.message, "from the backup")
+        XCTAssertNil(check(UpdateChecker(store: defaults(), current: "1.0"), [missing, missing]), "nothing answered")
+    }
+
+    /// The real sources on GitHub: the API alone, and the backup after a source that fails. Opt-in, needs the network.
+    func testReadsTheLiveFeeds() throws {
+        guard ProcessInfo.processInfo.environment["MENU_BAR_EMULATOR_NETWORK_TESTS"] != nil else { throw XCTSkip("network test") }
+        let broken = URLRequest(url: URL(string: "https://api.github.com/repos/Kiasora/no-such-repo/contents/update.json")!)
+        for feeds in [Array(UpdateChecker.feeds.prefix(1)), [broken] + UpdateChecker.feeds.dropFirst()] {
+            let checker = UpdateChecker(store: defaults(), current: "1.0")
+            XCTAssertEqual(check(checker, feeds), true, "\(feeds.map(\.url))")
+            XCTAssertNotNil(checker.available?.download)
+        }
+    }
 }
 
 final class NewSystemsTests: EmulatorTestCase {
