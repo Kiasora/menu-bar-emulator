@@ -400,6 +400,7 @@
 		BE0000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "";
@@ -417,8 +418,10 @@
 					"$(PROJECT_DIR)/MenuBarEmulator/Cores",
 				);
 				MARKETING_VERSION = 1.0.5;
-				ARCHS = arm64; /* the emulator cores are Apple Silicon only */
-				OTHER_CFLAGS = "$(inherited) -ffile-prefix-map=$(PROJECT_DIR)=.";
+				OTHER_CFLAGS = (
+					"$(inherited)",
+					"-ffile-prefix-map=$(PROJECT_DIR)=.",
+				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -file-prefix-map $(PROJECT_DIR)=.";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kian.MenuBarEmulator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
