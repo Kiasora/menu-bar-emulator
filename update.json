@@ -1,1 +1,7 @@
-{"version": "1.0.4", "message": "nes, snes, genesis, master system and game gear now work, plus game folders, open at login and new menu bar icons", "url": "https://ko-fi.com/kian"}
+{
+  "version": "1.0.4",
+  "message": "nes, snes, genesis, master system and game gear now work, plus game folders, open at login and new menu bar icons",
+  "url": "https://ko-fi.com/kian",
+  "download": "https://github.com/Kiasora/menu-bar-emulator/releases/download/v1.0.4/Menu-Bar-Emulator-1.0.4-macOS.zip",
+  "sha256": "06a553ee57b69eda51df26c76932c582a64d6e765d6a7659449df31071c054f9"
+}
