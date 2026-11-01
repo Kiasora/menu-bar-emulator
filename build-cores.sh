@@ -42,7 +42,7 @@ cmake -S cores/melonds-ds -B $B/melonds -G Ninja -DCMAKE_BUILD_TYPE=Release -DCM
 ninja -C $B/melonds
 J=$(sysctl -n hw.ncpu)
 make -C cores/fceumm -f Makefile.libretro -j$J platform=osx arch=arm64
-make -C cores/bsnes/bsnes -j$J target=libretro binary=library platform=macos local=false
+make -C cores/bsnes/bsnes -j$J target=libretro binary=library platform=macos local=false compiler="clang++ -ffile-prefix-map=$PWD=."
 make -C cores/gearsystem/platforms/libretro -j$J platform=osx arch=arm64
 cmake -S cores/clownmdemu -B $B/clownmdemu -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
 ninja -C $B/clownmdemu
@@ -52,6 +52,7 @@ cp $B/mgba/mgba_libretro.dylib BuiltCores/mgba.libretro
 cp $B/melonds/src/libretro/melondsds_libretro.dylib BuiltCores/melondsds.libretro
 cp cores/fceumm/fceumm_libretro.dylib BuiltCores/fceumm.libretro
 cp cores/bsnes/bsnes/out/bsnes_libretro.dylib BuiltCores/bsnes.libretro
+strip -S -x BuiltCores/bsnes.libretro # its debug map lists every build folder path
 cp cores/gearsystem/platforms/libretro/gearsystem_libretro.dylib BuiltCores/gearsystem.libretro
 cp $B/clownmdemu/clownmdemu_libretro.dylib BuiltCores/clownmdemu.libretro
 echo "Cores copied to BuiltCores/"
