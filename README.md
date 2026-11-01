@@ -17,6 +17,9 @@ Game Boy, GBA, DS, NES, SNES, Genesis, Master System and Game Gear games, living
 - 12 DS screen layouts, the mouse as the stylus, and a separate touch-screen window.
 - Cheats and IPS / UPS / BPS mod patches, box art or your own pictures, custom themes.
 - Built-in lo-fi music: an original 30-minute mix made in code. Turn it on, or have it play while you fast-forward.
+- Automatic save backups (every 10 minutes of play, the newest 20) you can restore: right-click a game › Save Backups.
+- Ghost mode: the popped-out window turns see-through and lets clicks through, so you can watch while you work.
+- Drop a game on the menu bar icon to play it, Shuffle for a random game, a CRT filter, play-time milestones.
 
 ## Install
 1. Download the latest zip from [Releases](../../releases) and drag **Menu Bar Emulator** into Applications.
