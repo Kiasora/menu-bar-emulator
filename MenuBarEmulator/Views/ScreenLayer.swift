@@ -48,7 +48,7 @@ final class ScreenView: NSView {
         didSet { if crop != oldValue, let source { show(source) } }
     }
     var filter: Display.Filter = .sharp {
-        didSet { picture.magnificationFilter = filter == .smooth ? .linear : .nearest }
+        didSet { picture.magnificationFilter = filter == .smooth || filter == .crt ? .linear : .nearest }
     }
     /// What's on screen (already cropped), also used when the view is drawn into an image.
     private(set) var current: CGImage?
@@ -295,6 +295,25 @@ final class ScreenView: NSView {
 }
 
 /// Thin dark lines between pixels, like an old handheld LCD. Skipped when pixels are too small to show it.
+/// CRT look for the home consoles: a dark scanline under every row of the picture and slightly darker edges.
+struct Scanlines: View {
+    let rows: Int
+
+    var body: some View {
+        Canvas { context, size in
+            let dy = size.height / CGFloat(rows)
+            guard dy >= 2 else { return }
+            var path = Path()
+            for j in 0..<rows { path.addRect(CGRect(x: 0, y: CGFloat(j) * dy + dy * 0.62, width: size.width, height: dy * 0.38)) }
+            context.fill(path, with: .color(.black.opacity(0.32)))
+            context.fill(Path(CGRect(origin: .zero, size: size)),
+                         with: .radialGradient(Gradient(colors: [.clear, .black.opacity(0.28)]), center: CGPoint(x: size.width / 2, y: size.height / 2),
+                                               startRadius: min(size.width, size.height) * 0.45, endRadius: max(size.width, size.height) * 0.75))
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 struct LCDGrid: View {
     let columns: Int
     let rows: Int

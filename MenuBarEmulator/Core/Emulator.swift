@@ -25,6 +25,9 @@ final class Emulator {
     var windowVisible = false { didSet { sync() } }
     var showingGame = false { didSet { sync() } }
     var userPaused = false { didSet { sync() } }
+    /// False while the Mac sleeps, its screens are off or locked, or another user is switched in. Pausing then saves
+    /// the game and stops the play-time clock (it used to keep counting through a whole night with the lid shut).
+    var systemAwake = true { didSet { sync() } }
 
     /// Fast-forward from the key (toggles) or a controller's right trigger (hold). Sound mutes while it's on.
     var fastForward = false
@@ -149,6 +152,30 @@ final class Emulator {
         for dir in [bios, saves] { try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
         biosDir = strdup(bios.path)
         saveDir = strdup(saves.path)
+        watchSystem()
+    }
+
+    @ObservationIgnored private var asleep = Set<String>()
+
+    /// Sleep, display sleep, screen lock and fast user switching each count as "away" until they end.
+    private func watchSystem() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        let pairs: [(away: Notification.Name, back: Notification.Name, center: NotificationCenter)] = [
+            (NSWorkspace.willSleepNotification, NSWorkspace.didWakeNotification, workspace),
+            (NSWorkspace.screensDidSleepNotification, NSWorkspace.screensDidWakeNotification, workspace),
+            (NSWorkspace.sessionDidResignActiveNotification, NSWorkspace.sessionDidBecomeActiveNotification, workspace),
+            (Notification.Name("com.apple.screenIsLocked"), Notification.Name("com.apple.screenIsUnlocked"), DistributedNotificationCenter.default()),
+        ]
+        for pair in pairs {
+            let reason = pair.away.rawValue
+            pair.center.addObserver(forName: pair.away, object: nil, queue: .main) { [weak self] _ in self?.setAway(reason, true) }
+            pair.center.addObserver(forName: pair.back, object: nil, queue: .main) { [weak self] _ in self?.setAway(reason, false) }
+        }
+    }
+
+    private func setAway(_ reason: String, _ away: Bool) {
+        if away { asleep.insert(reason) } else { asleep.remove(reason) }
+        if systemAwake != asleep.isEmpty { systemAwake = asleep.isEmpty }
     }
 
     // MARK: Playing
@@ -239,7 +266,7 @@ final class Emulator {
 
     /// Starts or stops the frame timer to match `windowVisible`, `showingGame` and `userPaused`. Every stop saves.
     private func sync() {
-        let shouldRun = core != nil && windowVisible && showingGame && !userPaused
+        let shouldRun = core != nil && windowVisible && showingGame && !userPaused && systemAwake
         guard shouldRun != isRunning else { return }
         isRunning = shouldRun
         if shouldRun {
@@ -411,8 +438,19 @@ final class Emulator {
 
     private func recordPlaytime() {
         guard let start = runningSince, let game else { return }
+        let before = library.meta(for: game).playtime
         library.addPlaytime(CACurrentMediaTime() - start, to: game)
         runningSince = nil
+        if let hours = Self.milestone(from: before, to: library.meta(for: game).playtime) {
+            show("\(hours) hour\(hours == 1 ? "" : "s") in \(game.gameTitle)", "trophy.fill")
+        }
+    }
+
+    static let milestoneHours = [1, 5, 10, 25, 50, 100]
+
+    /// The play-time milestone (in hours) crossed between two totals, if any.
+    static func milestone(from before: TimeInterval, to after: TimeInterval) -> Int? {
+        milestoneHours.last { before < Double($0) * 3600 && after >= Double($0) * 3600 }
     }
 
     private func fail(_ message: String) {
@@ -479,9 +517,52 @@ final class Emulator {
         do {
             try bytes.write(to: url, options: .atomic)
             lastSRAM = bytes
+            if let game { backUpSave(bytes, for: game) }
         } catch {
             NSLog("Saving \(url.path) failed: \(error)")
         }
+    }
+
+    // MARK: Save backups
+
+    /// At most one backup this often, so they span hours of play rather than the last few minutes.
+    static var backupInterval: TimeInterval = 10 * 60
+    static let backupsKept = 20
+
+    private func backupFolder(for rom: URL) -> URL {
+        library.root.appending(path: "Saves/Backups").appending(path: rom.lastPathComponent)
+    }
+
+    /// Copies of a game's in-game save, newest first.
+    func saveBackups(for rom: URL) -> [(url: URL, date: Date)] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: backupFolder(for: rom), includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        return files.filter { $0.pathExtension == "srm" }
+            .compactMap { url in (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate).map { (url, $0) } }
+            .sorted { $0.date > $1.date }
+    }
+
+    /// Keeps a copy of the save every so often (the newest 20), so a corrupted or overwritten save can come back.
+    func backUpSave(_ bytes: Data, for rom: URL, force: Bool = false) {
+        let existing = saveBackups(for: rom)
+        if !force, let newest = existing.first, Date().timeIntervalSince(newest.date) < Self.backupInterval { return }
+        let folder = backupFolder(for: rom)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH.mm.ss.SSS"
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try bytes.write(to: folder.appending(path: formatter.string(from: Date()) + ".srm"), options: .atomic)
+        } catch {
+            return NSLog("Save backup failed: \(error)")
+        }
+        for old in saveBackups(for: rom).dropFirst(Self.backupsKept) { try? FileManager.default.removeItem(at: old.url) }
+    }
+
+    /// Puts a backup back as the game's save. The save it replaces is backed up first, so this can be undone too.
+    func restoreBackup(_ backup: URL, for rom: URL) throws {
+        let data = try Data(contentsOf: backup) // first: backing up the current save can prune the oldest backup
+        if rom == game { saveSRAM() }
+        if let current = try? Data(contentsOf: existingSaveFile(for: rom)) { backUpSave(current, for: rom, force: true) }
+        try importSave(data, for: rom)
     }
 
     // MARK: Save states
@@ -617,7 +698,10 @@ final class Emulator {
     /// Replaces the in-game save with one from elsewhere. The resume point is dropped so the game boots from the
     /// imported save (the current save is kept as a backup next to it).
     func importSave(from source: URL, for rom: URL) throws {
-        let data = try Data(contentsOf: source)
+        try importSave(Data(contentsOf: source), for: rom)
+    }
+
+    func importSave(_ data: Data, for rom: URL) throws {
         let wasPlaying = rom == game
         if wasPlaying { stop() }
         let file = saveFile(for: rom)
@@ -659,7 +743,7 @@ final class Emulator {
     private func updateRewind() {
         let wants = holdingRewindKey || holdingRewindPad
         if wants && !canRewind && !rewindWarned {
-            show(rewindEnabled ? "Rewind works in Game Boy and GBA games" : "Rewind is off in Settings", "backward.fill")
+            show(rewindEnabled ? "Rewind isn't available in DS games" : "Rewind is off in Settings", "backward.fill")
             rewindWarned = true
         }
         if !wants { rewindWarned = false }
@@ -720,7 +804,10 @@ final class Emulator {
     /// Saves the current picture, scaled up with sharp pixels, to ~/Pictures/Menu Bar Emulator.
     @discardableResult
     func screenshot() -> URL? {
-        guard let frame, let game else { return nil }
+        guard let frame, let game else {
+            show("Nothing to capture yet", "camera")
+            return nil
+        }
         let scale = frame.width < 300 ? 4 : 2
         let w = frame.width * scale, h = frame.height * scale
         guard let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
@@ -1100,14 +1187,39 @@ final class AudioPlayer {
     /// Times it ran dry, or had to jump ahead because it fell far behind.
     private(set) var underruns = 0, skips = 0
 
+    /// Between start() and stop(): the game wants sound.
+    private var active = false
+    private var deviceObserver: NSObjectProtocol?
+
     init() {
         left.initialize(repeating: 0, count: Self.capacity)
         right.initialize(repeating: 0, count: Self.capacity)
+        // AirPods connecting, headphones unplugged…: the engine stops itself on any output change, and the game went
+        // silent until the next pause. Start again on the new device.
+        deviceObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
+            self?.restartIfNeeded()
+        }
     }
 
     deinit {
+        if let deviceObserver { NotificationCenter.default.removeObserver(deviceObserver) }
         left.deallocate()
         right.deallocate()
+    }
+
+    /// Whether sound is going out right now (tests).
+    var isOutputRunning: Bool { engine.isRunning }
+
+    func restartIfNeeded() {
+        guard active, !engine.isRunning else { return }
+        clear()
+        do { try engine.start() } catch { NSLog("Audio failed to restart: \(error)") }
+    }
+
+    /// Stops the engine the way a device change does (tests).
+    func simulateDeviceChange() {
+        engine.stop()
+        NotificationCenter.default.post(name: .AVAudioEngineConfigurationChange, object: engine)
     }
 
     var volume: Float = 1 {
@@ -1115,6 +1227,7 @@ final class AudioPlayer {
     }
 
     func start(sampleRate: Double) {
+        active = true
         if node == nil || rate != sampleRate { build(sampleRate: sampleRate) }
         clear()
         guard !engine.isRunning else { return }
@@ -1122,6 +1235,7 @@ final class AudioPlayer {
     }
 
     func stop() {
+        active = false
         engine.pause()
         clear()
     }

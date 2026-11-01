@@ -391,3 +391,100 @@ struct SupporterSheet: View {
         if model.unlock(code) { model.sheet = nil } else { wrong = true }
     }
 }
+
+/// The automatic copies of a game's in-game save, newest first, each one a click from coming back.
+struct SaveBackupsSheet: View {
+    let model: AppModel
+    let rom: URL
+    @Environment(\.theme) private var theme
+    @State private var confirming: URL?
+
+    var body: some View {
+        let backups = model.emulator.saveBackups(for: rom)
+        SheetCard(title: "Save Backups", close: { model.sheet = nil }) {
+            Text("\(rom.gameTitle)'s in-game save is copied every 10 minutes you play (the newest \(Emulator.backupsKept) are kept). Restoring one backs up the current save first, so you can always go back.")
+                .font(.system(size: 12))
+                .foregroundStyle(theme.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+            if backups.isEmpty {
+                Label("No backups yet. They start once the game has saved.", systemImage: "clock.arrow.circlepath")
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.subtext)
+                    .padding(.vertical, 8)
+            }
+            VStack(spacing: 0) {
+                ForEach(Array(backups.enumerated()), id: \.element.url) { index, backup in
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(backup.date.formatted(date: .abbreviated, time: .shortened)).font(.system(size: 12.5, weight: .medium))
+                            Text(backup.date.formatted(.relative(presentation: .named))).font(.system(size: 11)).foregroundStyle(theme.subtext)
+                        }
+                        Spacer(minLength: 6)
+                        Button(confirming == backup.url ? "Sure? Restore" : "Restore") { restore(backup.url) }
+                            .buttonStyle(PillButtonStyle(kind: confirming == backup.url ? .primary : .secondary))
+                            .focusable(false)
+                            .padFocusable("backup-\(index)", cornerRadius: 15) { restore(backup.url) }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    if index < backups.count - 1 { Rectangle().fill(theme.hairline).frame(height: 1).padding(.leading, 12) }
+                }
+            }
+            .card(12)
+        }
+    }
+
+    private func restore(_ backup: URL) {
+        guard confirming == backup else { confirming = backup; return }
+        do {
+            try model.emulator.restoreBackup(backup, for: rom)
+            model.sheet = nil
+            model.show("Save restored", "clock.arrow.circlepath")
+        } catch {
+            model.show("Couldn't restore that save", "exclamationmark.triangle.fill")
+        }
+    }
+}
+
+/// Shown once after updating: the new things, each in a line.
+struct WhatsNewSheet: View {
+    let model: AppModel
+    @Environment(\.theme) private var theme
+
+    private let items: [(symbol: String, title: String, detail: String)] = [
+        ("slider.horizontal.3", "Settings in tabs", "General, Play, Sound, Look and About, instead of one long list."),
+        ("clock.arrow.circlepath", "Save backups", "Your in-game saves are copied every 10 minutes. Right-click a game › Save Backups to restore one."),
+        ("eye.slash", "Ghost mode", "Pop out, then ⋯ › Ghost Mode: see-through, clicks go through. Your shortcut brings it back."),
+        ("arrow.down.app", "Drop to play", "Drop a game on the menu bar icon and it starts right away."),
+        ("shuffle", "Shuffle", "The shuffle button next to search plays a random game."),
+        ("tv", "CRT filter", "Scanlines for NES, SNES and Genesis, in Display."),
+        ("trophy.fill", "Milestones", "A little cheer at 1, 5, 10 hours and up in a game."),
+        ("wrench.and.screwdriver", "Fixes", "Sleep and lock now pause and save, game sound survives AirPods, Genesis .bin games import."),
+    ]
+
+    var body: some View {
+        SheetCard(title: "What's new in \(AppModel.whatsNewVersion)", close: { model.sheet = nil }) {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(items, id: \.title) { item in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: item.symbol)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(theme.accent)
+                            .frame(width: 30, height: 30)
+                            .background(Circle().fill(theme.accent.opacity(0.13)))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.title).font(theme.display(13, .semibold))
+                            Text(item.detail).font(.system(size: 11.5)).foregroundStyle(theme.subtext).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            Button("Got It") { model.sheet = nil }
+                .buttonStyle(PillButtonStyle())
+                .focusable(false)
+                .keyboardShortcut(.defaultAction)
+                .padFocusable("whats-new-ok", cornerRadius: 15) { model.sheet = nil }
+                .frame(maxWidth: .infinity)
+        }
+    }
+}

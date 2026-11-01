@@ -142,7 +142,10 @@ struct GameSurface: View {
                 let size = Self.fit(picture, in: geo.size)
                 ScreenLayer(emulator: model.emulator, filter: display.filter, onDoubleClick: model.toggleFullScreen)
                     .frame(width: size.width, height: size.height)
-                    .overlay { if display.filter == .lcd { LCDGrid(columns: Int(picture.width), rows: Int(picture.height)) } }
+                    .overlay {
+                        if display.filter == .lcd { LCDGrid(columns: Int(picture.width), rows: Int(picture.height)) }
+                        if display.filter == .crt { Scanlines(rows: Int(picture.height)) }
+                    }
                     .frame(width: geo.size.width, height: geo.size.height)
             }
         }
@@ -204,7 +207,10 @@ private struct DSScreens: View {
     private func screen(_ crop: ScreenLayer.Crop, in rect: CGRect, scale s: CGFloat, framed: Bool, floating: Bool,
                         outlined: Bool, filter: Display.Filter) -> some View {
         ScreenLayer(emulator: model.emulator, crop: crop, filter: filter, touchScreen: crop == .bottom, onDoubleClick: model.toggleFullScreen)
-            .overlay { if filter == .lcd { LCDGrid(columns: 256, rows: 192) } }
+            .overlay {
+                if filter == .lcd { LCDGrid(columns: 256, rows: 192) }
+                if filter == .crt { Scanlines(rows: 192) }
+            }
             .frame(width: rect.width * s, height: rect.height * s)
             .clipShape(RoundedRectangle(cornerRadius: framed || floating || outlined ? 3 * s : 0, style: .continuous))
             .overlay {
@@ -232,7 +238,10 @@ struct SeparateScreenView: View {
         ZStack(alignment: .top) {
             Color.black
             ScreenLayer(emulator: model.emulator, crop: display.swap ? .top : .bottom, filter: display.filter, touchScreen: true)
-                .overlay { if display.filter == .lcd { LCDGrid(columns: 256, rows: 192) } }
+                .overlay {
+                    if display.filter == .lcd { LCDGrid(columns: 256, rows: 192) }
+                    if display.filter == .crt { Scanlines(rows: 192) }
+                }
             if hovering {
                 HStack(spacing: 0) {
                     Spacer()
@@ -413,12 +422,16 @@ private struct ControlBar: View {
             Button("Controls…" + key(.help)) { model.togglePanel(.help) }
             Divider()
             Button("Take Screenshot" + key(.screenshot)) { emulator.screenshot() }
+            if let game = emulator.game { Button("Save Backups…") { model.sheet = .saveBackups(game) } }
             if emulator.canUndoLoad { Button("Undo Load") { emulator.undoLoad() } }
             Button(emulator.soundOn ? "Mute" + key(.mute) : "Unmute" + key(.mute)) { emulator.soundOn.toggle() }
             Button(model.prefs.lofiOn ? "Turn Lo-fi Off" : "Turn Lo-fi On") { model.toggleLofi() }
             Button(model.prefs.silentGames ? "Turn Game Sound Back On" : "No Sound in Games") { model.toggleSilentGames() }
             Button("Bigger  ⌘+") { model.zoomGame(1) }
             Button("Smaller  ⌘−") { model.zoomGame(-1) }
+            if model.isFloating && !model.isFullScreen {
+                Button("Ghost Mode (watch while you work)") { model.setGhost(true) }
+            }
             Divider()
             Button("Restart Game") { emulator.restart() }
             Button("Close Game") { if let game = emulator.game { model.closeGame(game) } }

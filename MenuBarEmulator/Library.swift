@@ -72,10 +72,13 @@ final class Library {
         for url in urls.flatMap(Self.expandingFolders) {
             let ext = url.pathExtension.lowercased()
             if Self.patchExtensions.contains(ext) { patches.append(url); continue }
-            let isROM = Self.romExtensions.contains(ext)
+            // Genesis games often come as .bin, which otherwise means a BIOS file: their header gives them away.
+            let genesisBin = ext == "bin" && Self.isGenesisROM(url)
+            let isROM = Self.romExtensions.contains(ext) || genesisBin
             guard isROM || Self.biosExtensions.contains(ext) else { continue }
             let dir = root.appending(path: isROM ? "ROMs" : "BIOS")
-            let dest = dir.appending(path: url.lastPathComponent)
+            let name = genesisBin ? url.deletingPathExtension().lastPathComponent + ".md" : url.lastPathComponent
+            let dest = dir.appending(path: name)
             // Never overwrite: a same-named file may hold the user's only copy.
             guard !fm.fileExists(atPath: dest.path) else { continue }
             do {
@@ -263,6 +266,14 @@ final class Library {
 
     // MARK: Files
 
+    /// A Mega Drive / Genesis cartridge says "SEGA" at 0x100 (sometimes 0x101).
+    static func isGenesisROM(_ url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        guard (try? handle.seek(toOffset: 0x100)) != nil, let header = try? handle.read(upToCount: 16), header.count == 16 else { return false }
+        return String(decoding: header, as: UTF8.self).contains("SEGA")
+    }
+
     private static func expandingFolders(_ url: URL) -> [URL] {
         guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { return [url] }
         let files = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
@@ -299,7 +310,7 @@ enum GameSystem: String, CaseIterable, Identifiable {
         self = system
     }
 
-    /// shortcut: Genesis .bin files aren't picked up (.bin means BIOS here); rename them to .md.
+    /// Genesis .bin files are recognized by their header on import and saved as .md (.bin otherwise means BIOS).
     var extensions: [String] {
         switch self {
         case .snes: ["sfc", "smc"]

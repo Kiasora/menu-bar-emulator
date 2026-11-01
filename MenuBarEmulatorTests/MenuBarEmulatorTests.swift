@@ -16,6 +16,14 @@ class EmulatorTestCase: XCTestCase {
         try? FileManager.default.removeItem(at: temp)
     }
 
+    /// Waits (up to `timeout`) for something that settles on a later turn of the main queue. Fixed short waits flaked
+    /// when the Mac was busy.
+    func eventually(_ timeout: TimeInterval = 2, _ condition: () -> Bool) -> Bool {
+        let end = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
+        return condition()
+    }
+
     func defaults() -> UserDefaults {
         UserDefaults(suiteName: "MenuBarEmulatorTests.\(UUID().uuidString)")!
     }
@@ -1075,12 +1083,10 @@ final class LofiTests: EmulatorTestCase {
         XCTAssertEqual(model.lofiVolume, 0, "music off at normal speed")
         emulator.fastForward = true
         XCTAssertGreaterThan(model.lofiVolume, 0, "sped up")
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-        XCTAssertGreaterThan(model.lofi.volume, 0, "the player follows along")
+        XCTAssertTrue(eventually { model.lofi.volume > 0 }, "the player follows along")
         model.toggleLofiSpedUp()
         XCTAssertEqual(model.lofiVolume, 0, "the ⏩ switch turns that off")
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-        XCTAssertEqual(model.lofi.volume, 0, "and it fades out")
+        XCTAssertTrue(eventually { model.lofi.volume == 0 }, "and it fades out")
         emulator.fastForward = false
         emulator.soundOn = false
         model.prefs.lofiOn = true
@@ -1089,8 +1095,7 @@ final class LofiTests: EmulatorTestCase {
         XCTAssertGreaterThan(model.lofiVolume, 0, "music on plays in games too")
         model.toggleSilentGames()
         XCTAssertEqual(model.lofiVolume, 0, "No sound in games silences the lo-fi while a game's up")
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        XCTAssertTrue(emulator.silenced, "and the game's own sound")
+        XCTAssertTrue(eventually { emulator.silenced }, "and the game's own sound")
         model.windowOnScreen = true
         model.screen = .library
         emulator.showingGame = false
@@ -1742,5 +1747,202 @@ final class AppUpdaterTests: EmulatorTestCase {
         try AppUpdater.swap(staged, into: installed)
         XCTAssertEqual(version(installed), "1.0.4")
         XCTAssertEqual(shell("/usr/bin/codesign", ["--verify", "--deep", "--strict", installed.path]), 0)
+    }
+}
+
+final class NextFixTests: EmulatorTestCase {
+    private func spin(_ seconds: Double = 0.15) { RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
+
+    /// Closing the lid, locking the screen or switching users pauses and saves, like hiding the window.
+    func testSleepAndLockPauseAndSaveTheGame() throws {
+        let emulator = makeEmulator()
+        emulator.windowVisible = true
+        emulator.showingGame = true
+        emulator.play(try testROM(Self.gba))
+        XCTAssertTrue(emulator.isRunning)
+        let center = NSWorkspace.shared.notificationCenter
+        center.post(name: NSWorkspace.willSleepNotification, object: nil)
+        spin()
+        XCTAssertFalse(emulator.isRunning, "sleep pauses")
+        XCTAssertTrue(emulator.hasState(Emulator.autoSlot), "and saves where you were")
+        center.post(name: NSWorkspace.screensDidSleepNotification, object: nil)
+        center.post(name: NSWorkspace.didWakeNotification, object: nil)
+        spin()
+        XCTAssertFalse(emulator.isRunning, "awake, but the screens are still off")
+        center.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
+        spin()
+        XCTAssertTrue(emulator.isRunning, "everything's back")
+        emulator.stop()
+    }
+
+    func testSoundComesBackAfterTheOutputDeviceChanges() {
+        let player = AudioPlayer()
+        player.start(sampleRate: 32768)
+        XCTAssertTrue(player.isOutputRunning)
+        player.simulateDeviceChange()
+        spin()
+        XCTAssertTrue(player.isOutputRunning, "restarted on the new device")
+        player.stop()
+        player.simulateDeviceChange()
+        spin()
+        XCTAssertFalse(player.isOutputRunning, "but not after the game stopped it")
+    }
+
+    func testGenesisBinImportsAsAGame() throws {
+        let library = Library(root: temp.appending(path: "Library"))
+        var rom = [UInt8](repeating: 0, count: 0x400)
+        rom.replaceSubrange(0x100..<0x110, with: Array("SEGA GENESIS    ".utf8))
+        let bin = temp.appending(path: "Sonic.bin")
+        try Data(rom).write(to: bin)
+        library.importFiles([bin, try makeFile("bios7.bin")])
+        XCTAssertEqual(library.roms.map(\.lastPathComponent), ["Sonic.md"])
+        XCTAssertEqual(library.bios.map(\.lastPathComponent), ["bios7.bin"], "real BIOS files stay BIOS")
+        XCTAssertEqual(library.roms.first.flatMap(GameSystem.init(rom:)), .md)
+    }
+
+    func testScreenshotWithNothingOnScreenSaysSo() {
+        let emulator = makeEmulator()
+        var toasts: [String] = []
+        emulator.onToast = { text, _ in toasts.append(text) }
+        XCTAssertNil(emulator.screenshot())
+        XCTAssertEqual(toasts, ["Nothing to capture yet"])
+    }
+}
+
+final class NextFeatureTests: EmulatorTestCase {
+    private func spin(_ seconds: Double) { RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
+
+    /// A tiny NES game that just loops: enough to load, run and save.
+    private func tinyGame(_ name: String) throws -> URL {
+        var prg = [UInt8](repeating: 0xEA, count: 0x4000)
+        prg.replaceSubrange(0..<3, with: [0x4C, 0x00, 0xC0]) // JMP $C000
+        prg.replaceSubrange(0x3FFA..<0x4000, with: [0x00, 0xC0, 0x00, 0xC0, 0x00, 0xC0])
+        let header: [UInt8] = [0x4E, 0x45, 0x53, 0x1A, 1, 1] + [UInt8](repeating: 0, count: 10)
+        let url = temp.appending(path: name)
+        try Data(header + prg + [UInt8](repeating: 0, count: 0x2000)).write(to: url)
+        return url
+    }
+
+    private func modelWithGames(_ names: [String]) throws -> AppModel {
+        let library = Library(root: temp.appending(path: "Library"))
+        library.importFiles(try names.map { try tinyGame($0) })
+        let model = makeModel(library: library)
+        model.emulator.windowVisible = true
+        model.emulator.showingGame = true
+        return model
+    }
+
+
+    func testShufflePlaysADifferentGame() throws {
+        let model = try modelWithGames(["One.nes", "Two.nes"])
+        let one = try XCTUnwrap(model.library.roms.first { $0.lastPathComponent == "One.nes" })
+        model.play(one)
+        model.playRandom()
+        XCTAssertEqual(model.emulator.game?.lastPathComponent, "Two.nes", "never the one you're in when there's another")
+        let two = try XCTUnwrap(model.library.roms.first { $0.lastPathComponent == "Two.nes" })
+        model.library.put(one, in: "Folder")
+        model.screen = .library
+        model.playRandom()
+        XCTAssertEqual(model.emulator.game, one, "games in folders count on the main list")
+        _ = two
+        model.emulator.stop()
+    }
+
+
+    func testSaveBackupsKeepTheNewestAndRestoreUndoably() throws {
+        let emulator = makeEmulator()
+        let rom = temp.appending(path: "Game.gba")
+        Emulator.backupInterval = 0
+        defer { Emulator.backupInterval = 10 * 60 }
+        for i in 0..<25 {
+            emulator.backUpSave(Data([UInt8(i)]), for: rom)
+            Thread.sleep(forTimeInterval: 0.003)
+        }
+        var backups = emulator.saveBackups(for: rom)
+        XCTAssertEqual(backups.count, Emulator.backupsKept, "only the newest 20 are kept")
+        XCTAssertEqual(try Data(contentsOf: backups[0].url), Data([24]))
+        Emulator.backupInterval = 600
+        emulator.backUpSave(Data([99]), for: rom)
+        XCTAssertEqual(try Data(contentsOf: emulator.saveBackups(for: rom)[0].url), Data([24]), "at most one every 10 minutes")
+
+        try FileManager.default.createDirectory(at: emulator.saveFile(for: rom).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([77]).write(to: emulator.saveFile(for: rom))
+        let oldest = try XCTUnwrap(backups.last)
+        try emulator.restoreBackup(oldest.url, for: rom)
+        XCTAssertEqual(try Data(contentsOf: emulator.saveFile(for: rom)), Data([5]))
+        backups = emulator.saveBackups(for: rom)
+        XCTAssertEqual(try Data(contentsOf: backups[0].url), Data([77]), "the save it replaced was backed up first")
+    }
+
+
+    func testCRTFilterSticks() {
+        let store = defaults()
+        Display(store: store).filter = .crt
+        XCTAssertEqual(Display(store: store).filter, .crt)
+        XCTAssertEqual(Display.Filter.crt.title, "CRT")
+    }
+
+
+    @MainActor
+    func testGhostModeLetsClicksThroughUntilTheShortcut() {
+        let model = makeModel()
+        let window = FloatingWindow(model: model, store: defaults())
+        window.setGhost(true)
+        spin(0.4)
+        XCTAssertTrue(window.panelWindow.isVisible)
+        XCTAssertTrue(window.panelWindow.ignoresMouseEvents)
+        XCTAssertEqual(window.panelWindow.alphaValue, 0.5, accuracy: 0.05)
+        XCTAssertTrue(model.isGhost)
+        window.toggle(.floating) // the pop-out shortcut
+        spin(0.4)
+        XCTAssertFalse(window.panelWindow.ignoresMouseEvents)
+        XCTAssertFalse(model.isGhost)
+        XCTAssertTrue(window.panelWindow.isVisible, "it comes back instead of hiding")
+        XCTAssertEqual(window.panelWindow.alphaValue, 1, accuracy: 0.05)
+        window.hide()
+    }
+}
+
+final class NextExtrasTests: EmulatorTestCase {
+    func testMilestonesAtWholeHours() {
+        XCTAssertEqual(Emulator.milestone(from: 3500, to: 3700), 1)
+        XCTAssertNil(Emulator.milestone(from: 3700, to: 7000), "1 hour was already celebrated")
+        XCTAssertEqual(Emulator.milestone(from: 17900, to: 18100), 5)
+        XCTAssertEqual(Emulator.milestone(from: 0, to: 40000), 10, "a huge jump says the biggest one passed")
+    }
+
+    func testWhatsNewShowsOnceAfterUpdatingButNotOnAFreshInstall() {
+        let store = defaults()
+        store.set(true, forKey: "MenuBarEmulator.onboarded")
+        store.set("1.0.5", forKey: "MenuBarEmulator.lastVersion")
+        let updated = makeModel(store: store)
+        updated.showWhatsNewIfUpdated()
+        XCTAssertEqual(updated.sheet, .whatsNew)
+        let again = makeModel(store: store)
+        again.showWhatsNewIfUpdated()
+        XCTAssertNil(again.sheet, "only once")
+
+        let fresh = makeModel(store: defaults()) // not onboarded: the tour shows instead
+        fresh.showWhatsNewIfUpdated()
+        XCTAssertNil(fresh.sheet)
+    }
+
+    @MainActor
+    func testDroppingOneGameOnTheIconStartsIt() throws {
+        var prg = [UInt8](repeating: 0xEA, count: 0x4000)
+        prg.replaceSubrange(0..<3, with: [0x4C, 0x00, 0xC0])
+        prg.replaceSubrange(0x3FFA..<0x4000, with: [0x00, 0xC0, 0x00, 0xC0, 0x00, 0xC0])
+        let rom = temp.appending(path: "Dropped.nes")
+        try Data([0x4E, 0x45, 0x53, 0x1A, 1, 1] + [UInt8](repeating: 0, count: 10) + prg + [UInt8](repeating: 0, count: 0x2000)).write(to: rom)
+        let model = makeModel()
+        let window = FloatingWindow(model: model, store: defaults())
+        window.droppedOnIcon([rom])
+        XCTAssertEqual(model.emulator.game?.lastPathComponent, "Dropped.nes")
+        XCTAssertEqual(model.screen, .game)
+        model.emulator.stop()
+        window.droppedOnIcon([rom]) // already in the library: still starts it
+        XCTAssertEqual(model.emulator.game?.lastPathComponent, "Dropped.nes")
+        model.emulator.stop()
+        window.hide()
     }
 }

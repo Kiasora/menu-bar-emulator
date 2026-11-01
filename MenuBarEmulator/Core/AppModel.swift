@@ -13,8 +13,16 @@ final class AppModel {
         case folderName(rom: URL?, folder: String?)
         /// Enter the Ko-fi supporter code.
         case supporter
+        /// The automatic copies of a game's in-game save.
+        case saveBackups(URL)
+        /// What's new, once, after updating.
+        case whatsNew
     }
     enum SettingsPage: Hashable { case main, controls }
+    enum SettingsTab: String, CaseIterable, Hashable {
+        case general, play, sound, look, about
+        var title: String { rawValue.capitalized }
+    }
     enum LibraryFilter: Hashable { case all, favorites, system(GameSystem) }
     enum ShortcutSlot: Hashable { case popOut, menuBar }
 
@@ -44,6 +52,7 @@ final class AppModel {
     var panel: Panel? { didSet { if panel == nil { emulatorMenuOpen = false } } }
     var sheet: Sheet?
     var settingsPage: SettingsPage = .main
+    var settingsTab: SettingsTab = .general
     var onboardingStep = 0
     var filter: LibraryFilter = .all { didSet { openFolder = nil } }
     /// The folder you're looking inside, if any.
@@ -70,6 +79,8 @@ final class AppModel {
     private(set) var testerKeys = Set<UInt16>()
     var isFloating = false
     var isFullScreen = false
+    /// The popped-out window is see-through and lets clicks through (watch a game while you work).
+    var isGhost = false
     @ObservationIgnored private var emulatorMenuOpen = false
 
     // Hooks into the window, set by FloatingWindow.
@@ -79,6 +90,7 @@ final class AppModel {
     @ObservationIgnored var toggleFullScreen: () -> Void = {}
     @ObservationIgnored var hideWindow: () -> Void = {}
     @ObservationIgnored var popOut: () -> Void = {}
+    @ObservationIgnored var setGhost: (Bool) -> Void = { _ in }
     /// Quits and opens the app again (after a factory reset).
     @ObservationIgnored var relaunch: () -> Void = {}
     @ObservationIgnored var zoomGame: (Int) -> Void = { _ in }
@@ -222,6 +234,28 @@ final class AppModel {
         panel = nil
         sheet = nil
         screen = .game
+    }
+
+    /// Shuffle: a random game from what the library is showing (not the one you're already in, if there's a choice).
+    func playRandom() {
+        // On the main list, games tucked into folders count too.
+        let pool = showsFolders || visibleROMs.isEmpty ? library.roms : visibleROMs
+        guard let rom = pool.filter({ $0 != emulator.game }).randomElement() ?? pool.randomElement() else { return }
+        play(rom)
+        show("Shuffled: \(rom.gameTitle)", "shuffle")
+    }
+
+    /// The version the What's New card is about.
+    static let whatsNewVersion = "1.1"
+
+    /// After updating from an older version (not on a fresh install), show what's new once.
+    func showWhatsNewIfUpdated() {
+        let key = "MenuBarEmulator.lastVersion"
+        let last = store.string(forKey: key)
+        store.set(AppInfo.version, forKey: key)
+        guard screen == .library, sheet == nil, last.map({ UpdateChecker.isNewer(Self.whatsNewVersion, than: $0) }) ?? true,
+              !UpdateChecker.isNewer(Self.whatsNewVersion, than: AppInfo.version) else { return }
+        sheet = .whatsNew
     }
 
     /// Closes an open game (its spot is saved, so opening it again resumes).

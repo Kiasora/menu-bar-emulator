@@ -46,6 +46,7 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
         model.toggleFullScreen = { [weak self] in self?.toggleFullScreen() }
         model.hideWindow = { [weak self] in self?.hide() }
         model.popOut = { [weak self] in self?.show(.floating) }
+        model.setGhost = { [weak self] on in self?.setGhost(on) }
         model.relaunch = { [weak self] in self?.relaunchApp() }
         model.zoomGame = { [weak self] step in self?.zoom(step) }
         model.isTyping = { [weak self] in self?.panel.firstResponder is NSTextView }
@@ -62,10 +63,7 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
             button.action = #selector(statusItemClicked)
             button.toolTip = "\(AppInfo.name) (⌥P)"
             // Files can be dropped straight on the icon; NSWindow forwards drag events to its delegate.
-            iconDrop.onDrop = { [weak self] urls in
-                self?.model.importURLs(urls)
-                self?.show(.menuBar)
-            }
+            iconDrop.onDrop = { [weak self] urls in self?.droppedOnIcon(urls) }
             button.window?.registerForDraggedTypes([.fileURL])
             button.window?.delegate = iconDrop
         }
@@ -89,7 +87,22 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
 
         if model.screen == .onboarding {
             DispatchQueue.main.async { self.show(.floating) }
+        } else {
+            model.showWhatsNewIfUpdated()
         }
+    }
+
+    /// Files dropped on the menu bar icon get imported; a single game starts right away.
+    func droppedOnIcon(_ urls: [URL]) {
+        let before = Set(model.library.roms)
+        model.importURLs(urls)
+        let dropped = urls.filter { GameSystem(rom: $0) != nil || $0.pathExtension.lowercased() == "bin" }
+        let added = model.library.roms.filter { !before.contains($0) }
+        if dropped.count == 1,
+           let rom = added.first ?? model.library.roms.first(where: { $0.deletingPathExtension().lastPathComponent == dropped[0].deletingPathExtension().lastPathComponent }) {
+            model.play(rom)
+        }
+        show(.menuBar)
     }
 
     /// Your chosen menu bar icon (the controller if it's locked or its picture is gone).
@@ -258,7 +271,36 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
 
     @objc private func statusItemClicked() { toggle(.menuBar) }
 
+    // MARK: - Ghost mode
+
+    private var ghost = false
+
+    /// See-through and click-through: the popped-out game floats over your work without getting in the way.
+    func setGhost(_ on: Bool) {
+        guard on != ghost else { return }
+        if on {
+            if isFullScreen { exitFullScreen() }
+            if !panel.isVisible || mode != .floating { show(.floating) }
+            model.panel = nil
+        }
+        ghost = on
+        model.isGhost = on
+        panel.ignoresMouseEvents = on
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            panel.animator().alphaValue = on ? 0.5 : 1
+        }
+        if on {
+            let shortcut = model.prefs.popOutShortcut?.display
+            model.show("Ghost mode: clicks go through. \(shortcut ?? "The menu bar icon") brings it back", "eye.slash")
+        }
+    }
+
     func toggle(_ requested: Mode) {
+        if ghost { // the shortcut or the icon brings a ghost window back to normal
+            setGhost(false)
+            return
+        }
         if isFullScreen {
             exitFullScreen()
             if requested == .menuBar { show(.menuBar) }
@@ -272,6 +314,7 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
     }
 
     func show(_ requested: Mode) {
+        if ghost { setGhost(false) }
         hideGeneration += 1
         if panel.isVisible && mode == .floating { saveFloatingFrame() }
         let wasVisible = panel.isVisible
@@ -306,6 +349,7 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
     }
 
     func hide() {
+        if ghost { setGhost(false) }
         screenPanel?.orderOut(nil)
         if isFullScreen { exitFullScreen() }
         if mode == .floating { saveFloatingFrame() }

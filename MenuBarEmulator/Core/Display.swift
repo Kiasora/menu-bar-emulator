@@ -67,9 +67,9 @@ final class Display {
     }
 
     enum Filter: String, CaseIterable, Identifiable {
-        case sharp, smooth, lcd
+        case sharp, smooth, lcd, crt
         var id: String { rawValue }
-        var title: String { self == .lcd ? "LCD" : rawValue.capitalized }
+        var title: String { self == .lcd || self == .crt ? rawValue.uppercased() : rawValue.capitalized }
     }
 
     var layout: Layout { didSet { save() } }

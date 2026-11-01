@@ -59,45 +59,28 @@ private struct MainSettings: View {
     private var emulator: Emulator { model.emulator }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 18) {
             if AppInfo.isEarlyBuild { supportBanner }
-
-            SettingsGroup(title: "Playing") {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Fast-forward speed (\(key(.fastForward)) toggles it)").font(.system(size: 13))
-                        Spacer()
-                        Text(emulator.speed.speedLabel)
-                            .font(.system(size: 13, weight: .semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(theme.accent)
-                    }
-                    SpeedSlider(emulator: emulator, padID: "ff-speed")
+            SegmentedChoice(options: AppModel.SettingsTab.allCases.map { ($0.title, $0) }, selection: model.settingsTab,
+                            padID: "settings-tab") { model.settingsTab = $0 }
+            Group {
+                switch model.settingsTab {
+                case .general: general
+                case .play: play
+                case .sound: sound
+                case .look: look
+                case .about: about
                 }
-                ToggleRow(title: "Rewind", subtitle: "Hold \(key(.rewind)) in any game but DS",
-                          isOn: Binding { emulator.rewindEnabled } set: { emulator.rewindEnabled = $0 }, padID: "rewind")
-                ToggleRow(title: "Sound", subtitle: "Everything, lo-fi too. \(key(.mute)) or the speaker up top mutes it",
-                          isOn: Binding { emulator.soundOn } set: { emulator.soundOn = $0 }, padID: "sound")
-                ToggleRow(title: "No sound in games", subtitle: "Silences everything while a game's up, lo-fi included",
-                          isOn: Binding { model.prefs.silentGames } set: { model.prefs.silentGames = $0 }, padID: "silent-games")
-                SettingsRow(title: "Volume") {
-                    Slider(value: Binding { emulator.volume } set: { emulator.volume = $0 }, in: 0...1)
-                        .frame(width: 170)
-                        .tint(theme.accent)
-                        .disabled(!emulator.soundOn)
-                        .accessibilityLabel("Volume")
-                }
-                .padFocusable("volume", cornerRadius: 8, adjust: { emulator.volume = min(max(emulator.volume + Double($0) * 0.1, 0), 1) }) {}
             }
+            .transition(.opacity)
+        }
+        .animation(.snappy(duration: 0.2), value: model.settingsTab)
+    }
 
-            SettingsGroup(title: "Music", footer: "Both are also at the top of the library, and in the game bar.") {
-                ToggleRow(title: "Lo-fi music", subtitle: "Plays everywhere, games included, until you turn it off",
-                          isOn: Binding { model.prefs.lofiOn } set: { model.prefs.lofiOn = $0 }, padID: "lofi-on")
-                ToggleRow(title: "Lo-fi while fast-forwarding", subtitle: "Fades in where the sped-up game's sound would be",
-                          isOn: Binding { model.prefs.lofiSpedUp } set: { model.prefs.lofiSpedUp = $0 }, padID: "lofi-sped-up")
-                ToggleRow(title: "Keep playing when the window's closed", subtitle: "Lo-fi carries on in the background, like a music app",
-                          isOn: Binding { model.prefs.lofiInBackground } set: { model.prefs.lofiInBackground = $0 }, padID: "lofi-background")
-            }
+    // MARK: Tabs
+
+    private var general: some View {
+        VStack(alignment: .leading, spacing: 18) {
             SettingsGroup(title: "Window") {
                 ToggleRow(title: "Open at login", subtitle: "Starts in the menu bar when you log in to your Mac",
                           isOn: Binding { model.prefs.openAtLogin } set: { model.prefs.openAtLogin = $0 }, padID: "open-at-login")
@@ -121,7 +104,6 @@ private struct MainSettings: View {
                     .padFocusable("pop-out", cornerRadius: 8) { model.popOut() }
                 }
             }
-
             SettingsGroup(title: "Shortcuts", footer: "Work from any app. Click one, then press a key with ⌘, ⌥ or ⌃. Delete clears it.") {
                 SettingsRow(title: "Pop out", subtitle: "Floating window, on top of everything") {
                     ShortcutRecorder(model: model, slot: .popOut)
@@ -130,58 +112,6 @@ private struct MainSettings: View {
                     ShortcutRecorder(model: model, slot: .menuBar)
                 }
             }
-
-            SettingsGroup(title: "Controls", footer: "Any controller works: Xbox, PlayStation, Switch Pro, MFi. Right trigger fast-forwards, left trigger rewinds; Home, a stick click or Start + Select opens the game menu, and it drives every menu too.") {
-                Button { model.settingsPage = .controls } label: {
-                    SettingsRow(title: "Keyboard and tester", subtitle: "\(key(.a)) = A · \(key(.b)) = B · arrows move") {
-                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(theme.subtext)
-                    }
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .padFocusable("keyboard", cornerRadius: 8) { model.settingsPage = .controls }
-                SettingsRow(title: "Controller") {
-                    let names = model.gamepad?.connected ?? []
-                    Label(names.isEmpty ? "None connected" : names.joined(separator: ", "),
-                          systemImage: names.isEmpty ? "gamecontroller" : "checkmark.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(names.isEmpty ? theme.subtext : theme.good)
-                        .lineLimit(1)
-                }
-            }
-
-            SettingsGroup(title: "Picture") {
-                ToggleRow(title: "Color correction", subtitle: "GBA and GBC: the real screens' softer colors",
-                          isOn: Binding { emulator.colorCorrection } set: { emulator.colorCorrection = $0 }, padID: "color-correction")
-                ToggleRow(title: "LCD ghosting", subtitle: "Blends frames like the real screens (some games use it for see-through effects)",
-                          isOn: Binding { emulator.frameBlending } set: { emulator.frameBlending = $0 }, padID: "blending")
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Game Boy colors (original Game Boy games)").font(.system(size: 13))
-                    SegmentedChoice(options: Emulator.gbPalettes.map { ($0, $0) }, selection: emulator.gbPalette, padID: "palette") { emulator.gbPalette = $0 }
-                }
-                ToggleRow(title: "Show FPS", isOn: Binding { emulator.showFPS } set: { emulator.showFPS = $0 }, padID: "fps")
-                ToggleRow(title: "Box art", subtitle: "Downloads covers from libretro-thumbnails. Right-click a game to use your own picture.",
-                          isOn: Binding { model.covers.enabled } set: { model.covers.enabled = $0 }, padID: "box-art")
-            }
-
-            SettingsGroup(title: "Look") {
-                ThemePicker(model: model, selection: $themeRaw)
-            }
-
-            SettingsGroup(title: "Menu bar icon", footer: model.prefs.supporter
-                          ? "Thanks for supporting the app! Click the last one to use any picture."
-                          : "The controller is free. A tip on Ko-fi gets you a code that unlocks the rest, and your own picture.") {
-                MenuBarIconPicker(model: model)
-                if !model.prefs.supporter {
-                    SettingsRow(title: "Got a supporter code?") {
-                        Button("Enter Code") { model.sheet = .supporter }
-                            .buttonStyle(PillButtonStyle(kind: .secondary))
-                            .focusable(false)
-                    }
-                    .padFocusable("enter-code", cornerRadius: 8) { model.sheet = .supporter }
-                }
-            }
-
             SettingsGroup(title: "Library") {
                 SettingsRow(title: "Games, BIOS and saves", subtitle: "Application Support › MenuBarEmulator") {
                     Button("Show") { NSWorkspace.shared.open(model.library.root) }
@@ -201,8 +131,121 @@ private struct MainSettings: View {
                         .focusable(false)
                 }
                 .padFocusable("import", cornerRadius: 8) { model.importFiles() }
+                ToggleRow(title: "Box art", subtitle: "Downloads covers from libretro-thumbnails. Right-click a game to use your own picture.",
+                          isOn: Binding { model.covers.enabled } set: { model.covers.enabled = $0 }, padID: "box-art")
             }
+        }
+    }
 
+    private var play: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SettingsGroup(title: "Playing") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Fast-forward speed (\(key(.fastForward)) toggles it)").font(.system(size: 13))
+                        Spacer()
+                        Text(emulator.speed.speedLabel)
+                            .font(.system(size: 13, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(theme.accent)
+                    }
+                    SpeedSlider(emulator: emulator, padID: "ff-speed")
+                }
+                ToggleRow(title: "Rewind", subtitle: "Hold \(key(.rewind)) in any game but DS",
+                          isOn: Binding { emulator.rewindEnabled } set: { emulator.rewindEnabled = $0 }, padID: "rewind")
+            }
+            SettingsGroup(title: "Controls", footer: "Any controller works: Xbox, PlayStation, Switch Pro, MFi. Right trigger fast-forwards, left trigger rewinds; Home, a stick click or Start + Select opens the game menu, and it drives every menu too.") {
+                Button { model.settingsPage = .controls } label: {
+                    SettingsRow(title: "Keyboard and tester", subtitle: "\(key(.a)) = A · \(key(.b)) = B · arrows move") {
+                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(theme.subtext)
+                    }
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .padFocusable("keyboard", cornerRadius: 8) { model.settingsPage = .controls }
+                SettingsRow(title: "Controller") {
+                    let names = model.gamepad?.connected ?? []
+                    Label(names.isEmpty ? "None connected" : names.joined(separator: ", "),
+                          systemImage: names.isEmpty ? "gamecontroller" : "checkmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(names.isEmpty ? theme.subtext : theme.good)
+                        .lineLimit(1)
+                }
+            }
+            SettingsGroup(title: "Picture") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Filter").font(.system(size: 13))
+                    SegmentedChoice(options: Display.Filter.allCases.map { ($0.title, $0) }, selection: model.display.filter, padID: "filter") { model.display.filter = $0 }
+                }
+                ToggleRow(title: "Color correction", subtitle: "GBA and GBC: the real screens' softer colors",
+                          isOn: Binding { emulator.colorCorrection } set: { emulator.colorCorrection = $0 }, padID: "color-correction")
+                ToggleRow(title: "LCD ghosting", subtitle: "Blends frames like the real screens (some games use it for see-through effects)",
+                          isOn: Binding { emulator.frameBlending } set: { emulator.frameBlending = $0 }, padID: "blending")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Game Boy colors (original Game Boy games)").font(.system(size: 13))
+                    SegmentedChoice(options: Emulator.gbPalettes.map { ($0, $0) }, selection: emulator.gbPalette, padID: "palette") { emulator.gbPalette = $0 }
+                }
+                ToggleRow(title: "Show FPS", isOn: Binding { emulator.showFPS } set: { emulator.showFPS = $0 }, padID: "fps")
+            }
+        }
+    }
+
+    private var sound: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SettingsGroup(title: "Sound") {
+                ToggleRow(title: "Sound", subtitle: "Everything, lo-fi too. \(key(.mute)) or the speaker up top mutes it",
+                          isOn: Binding { emulator.soundOn } set: { emulator.soundOn = $0 }, padID: "sound")
+                ToggleRow(title: "No sound in games", subtitle: "Silences everything while a game's up, lo-fi included",
+                          isOn: Binding { model.prefs.silentGames } set: { model.prefs.silentGames = $0 }, padID: "silent-games")
+                SettingsRow(title: "Volume") {
+                    Slider(value: Binding { emulator.volume } set: { emulator.volume = $0 }, in: 0...1)
+                        .frame(width: 170)
+                        .tint(theme.accent)
+                        .disabled(!emulator.soundOn)
+                        .accessibilityLabel("Volume")
+                }
+                .padFocusable("volume", cornerRadius: 8, adjust: { emulator.volume = min(max(emulator.volume + Double($0) * 0.1, 0), 1) }) {}
+            }
+            SettingsGroup(title: "Lo-fi music", footer: "The switches are also at the top of the library, and in the game bar.") {
+                ToggleRow(title: "Lo-fi music", subtitle: "Plays everywhere, games included, until you turn it off",
+                          isOn: Binding { model.prefs.lofiOn } set: { model.prefs.lofiOn = $0 }, padID: "lofi-on")
+                ToggleRow(title: "Lo-fi while fast-forwarding", subtitle: "Fades in where the sped-up game's sound would be",
+                          isOn: Binding { model.prefs.lofiSpedUp } set: { model.prefs.lofiSpedUp = $0 }, padID: "lofi-sped-up")
+                ToggleRow(title: "Keep playing when the window's closed", subtitle: "Lo-fi carries on in the background, like a music app",
+                          isOn: Binding { model.prefs.lofiInBackground } set: { model.prefs.lofiInBackground = $0 }, padID: "lofi-background")
+            }
+        }
+    }
+
+    private var look: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            SettingsGroup(title: "Theme") {
+                ThemePicker(model: model, selection: $themeRaw)
+            }
+            SettingsGroup(title: "Menu bar icon", footer: model.prefs.supporter
+                          ? "Thanks for supporting the app! Click the last one to use any picture."
+                          : "The controller is free. A tip on Ko-fi gets you a code that unlocks the rest, and your own picture.") {
+                MenuBarIconPicker(model: model)
+                if !model.prefs.supporter {
+                    SettingsRow(title: "Got a supporter code?") {
+                        Button("Enter Code") { model.sheet = .supporter }
+                            .buttonStyle(PillButtonStyle(kind: .secondary))
+                            .focusable(false)
+                    }
+                    .padFocusable("enter-code", cornerRadius: 8) { model.sheet = .supporter }
+                }
+            }
+        }
+    }
+
+    private var about: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if !AppInfo.isEarlyBuild { // the early-build banner up top has these
+                SettingsGroup(title: "Support") {
+                    linkRow("Send Feedback", symbol: "bubble.left", id: "feedback") { model.sheet = .feedback }
+                    linkRow("Leave a Tip", symbol: "heart", id: "tip") { model.sheet = .tip }
+                }
+            }
             SettingsGroup(title: "About") {
                 linkRow("Check for Updates", symbol: "arrow.triangle.2.circlepath", id: "check-updates") { model.checkForUpdates() }
                 linkRow("Welcome Tour", symbol: "sparkles", id: "tour") { model.replayOnboarding() }
@@ -211,7 +254,6 @@ private struct MainSettings: View {
                 SettingsRow(title: "Version") { Text(AppInfo.versionLabel).font(.system(size: 12)).foregroundStyle(theme.subtext) }
                 SettingsRow(title: "Made by") { Text("Kian").font(.system(size: 12)).foregroundStyle(theme.subtext) }
             }
-
             Button("Quit Menu Bar Emulator", action: quit)
                 .buttonStyle(PillButtonStyle(kind: .secondary))
                 .focusable(false)
