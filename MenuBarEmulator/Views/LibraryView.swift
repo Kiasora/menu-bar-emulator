@@ -28,7 +28,7 @@ struct LibraryView: View {
             topStrip
             header
             if let update = model.updates.available {
-                UpdateBanner(updates: model.updates, update: update)
+                UpdateBanner(updates: model.updates, updater: model.updater, update: update)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             if model.library.roms.isEmpty {
@@ -275,6 +275,7 @@ private struct SectionTitle: View {
 /// "Version 1.1 is out", with Kian's message from update.json and a button to get it.
 private struct UpdateBanner: View {
     let updates: UpdateChecker
+    let updater: AppUpdater
     let update: UpdateChecker.Update
     @Environment(\.theme) private var theme
 
@@ -285,7 +286,12 @@ private struct UpdateBanner: View {
                 .foregroundStyle(theme.accent)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Version \(update.version) is out").font(.system(size: 13, weight: .semibold))
-                if let message = update.message, !message.isEmpty {
+                if case .failed(let reason) = updater.state {
+                    Text(reason)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(theme.bad)
+                        .lineLimit(2)
+                } else if let message = update.message, !message.isEmpty {
                     Text(message)
                         .font(.system(size: 11.5))
                         .foregroundStyle(theme.subtext)
@@ -293,10 +299,26 @@ private struct UpdateBanner: View {
                 }
             }
             Spacer(minLength: 6)
-            Button("Get it") { NSWorkspace.shared.open(updates.link) }
-                .buttonStyle(PillButtonStyle())
-                .focusable(false)
-                .padFocusable("update-get", cornerRadius: 15) { NSWorkspace.shared.open(updates.link) }
+            switch updater.state {
+            case .downloading(let fraction):
+                ProgressView(value: fraction).frame(width: 70)
+            case .installing:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Installing…").font(.system(size: 11.5, weight: .medium)).foregroundStyle(theme.subtext)
+                }
+            case .idle where update.download != nil:
+                Button("Update", action: install)
+                    .buttonStyle(PillButtonStyle())
+                    .focusable(false)
+                    .help("Downloads \(update.version), then reopens on it. Your games and saves stay.")
+                    .padFocusable("update-get", cornerRadius: 15, action: install)
+            default: // no one-click download, or it failed: get it from the page
+                Button("Get it") { NSWorkspace.shared.open(updates.link) }
+                    .buttonStyle(PillButtonStyle())
+                    .focusable(false)
+                    .padFocusable("update-get", cornerRadius: 15) { NSWorkspace.shared.open(updates.link) }
+            }
             Button { withAnimation(.snappy) { updates.dismiss() } } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 11, weight: .bold))
@@ -314,6 +336,8 @@ private struct UpdateBanner: View {
         .padding(.horizontal, 18)
         .padding(.bottom, 12)
     }
+
+    private func install() { updater.install(update) }
 }
 
 // MARK: - Jump back in

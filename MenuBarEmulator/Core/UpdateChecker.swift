@@ -9,6 +9,9 @@ final class UpdateChecker {
         var version: String
         var message: String?
         var url: String?
+        /// The release zip for one-click updates (a GitHub release download), and its SHA-256.
+        var download: String?
+        var sha256: String?
     }
 
     static let feed = URL(string: "https://raw.githubusercontent.com/Kiasora/menu-bar-emulator/main/update.json")!

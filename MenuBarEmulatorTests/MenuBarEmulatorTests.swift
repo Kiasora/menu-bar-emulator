@@ -1640,3 +1640,75 @@ final class MenuBarIconTests: EmulatorTestCase {
         for icon in MenuBarIcon.choices { XCTAssertNotNil(icon.image(customFile: temp), "\(icon) draws") }
     }
 }
+
+final class AppUpdaterTests: EmulatorTestCase {
+    /// A tiny signed app bundle: enough for the updater's checks.
+    private func makeApp(_ folder: URL, version: String, id: String = "com.kian.MenuBarEmulator") throws -> URL {
+        let app = folder.appending(path: "Menu Bar Emulator.app")
+        let macOS = app.appending(path: "Contents/MacOS")
+        try FileManager.default.createDirectory(at: macOS, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: URL(filePath: "/usr/bin/true"), to: macOS.appending(path: "MenuBarEmulator"))
+        let info: [String: Any] = ["CFBundleIdentifier": id, "CFBundleShortVersionString": version, "CFBundleExecutable": "MenuBarEmulator",
+                                   "CFBundlePackageType": "APPL"]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: app.appending(path: "Contents/Info.plist"))
+        XCTAssertEqual(shell("/usr/bin/codesign", ["--force", "--deep", "-s", "-", app.path]), 0)
+        return app
+    }
+
+    @discardableResult
+    private func shell(_ tool: String, _ arguments: [String]) -> Int32 {
+        let process = Process()
+        process.executableURL = URL(filePath: tool)
+        process.arguments = arguments
+        try? process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
+    }
+
+    private func zip(_ app: URL) -> URL {
+        let zip = temp.appending(path: "update.zip")
+        shell("/usr/bin/ditto", ["-c", "-k", "--keepParent", app.path, zip.path])
+        return zip
+    }
+
+    /// Read from the file: Bundle caches by path, so it'd still report the old version after a swap.
+    private func version(_ app: URL) -> String? {
+        (NSDictionary(contentsOf: app.appending(path: "Contents/Info.plist")) as? [String: Any])?["CFBundleShortVersionString"] as? String
+    }
+
+    func testSwapsInTheNewVersionAndRefusesAnythingElse() throws {
+        let installed = try makeApp(temp.appending(path: "Applications"), version: "1.0.4")
+        let newer = try makeApp(temp.appending(path: "build"), version: "1.0.5")
+        let download = zip(newer)
+
+        XCTAssertThrowsError(try AppUpdater.prepare(zip: download, version: "1.0.6", sha256: nil, replacing: installed), "wrong version")
+        XCTAssertThrowsError(try AppUpdater.prepare(zip: download, version: "1.0.5", sha256: String(repeating: "0", count: 64), replacing: installed), "bad checksum")
+        let other = try makeApp(temp.appending(path: "other"), version: "1.0.5", id: "com.someone.else")
+        XCTAssertThrowsError(try AppUpdater.prepare(zip: zip(other), version: "1.0.5", sha256: nil, replacing: installed), "another app")
+        XCTAssertEqual(version(installed), "1.0.4", "nothing changed")
+
+        let staged = try AppUpdater.prepare(zip: zip(newer), version: "1.0.5", sha256: nil, replacing: installed)
+        try AppUpdater.swap(staged, into: installed)
+        XCTAssertEqual(version(installed), "1.0.5")
+        XCTAssertFalse(AppUpdater.isTrusted(URL(string: "https://evil.example/app.zip")!))
+        XCTAssertFalse(AppUpdater.isTrusted(URL(string: "http://github.com/a.zip")!))
+        XCTAssertTrue(AppUpdater.isTrusted(URL(string: "https://github.com/Kiasora/menu-bar-emulator/releases/download/v1.0.4/a.zip")!))
+    }
+
+    /// The real thing: GitHub's v1.0.4 zip installed over a copy of this app. Needs the network, so it's opt-in.
+    func testInstallsTheRealReleaseFromGitHub() throws {
+        guard ProcessInfo.processInfo.environment["MENU_BAR_EMULATOR_NETWORK_TESTS"] != nil else { throw XCTSkip("network test") }
+        let url = URL(string: "https://github.com/Kiasora/menu-bar-emulator/releases/download/v1.0.4/Menu-Bar-Emulator-1.0.4-macOS.zip")!
+        let installed = temp.appending(path: "Applications/Menu Bar Emulator.app")
+        try FileManager.default.createDirectory(at: installed.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: Bundle.main.bundleURL, to: installed)
+        let data = try Data(contentsOf: url)
+        let file = temp.appending(path: "release.zip")
+        try data.write(to: file)
+        let staged = try AppUpdater.prepare(zip: file, version: "1.0.4",
+                                            sha256: "06a553ee57b69eda51df26c76932c582a64d6e765d6a7659449df31071c054f9", replacing: installed)
+        try AppUpdater.swap(staged, into: installed)
+        XCTAssertEqual(version(installed), "1.0.4")
+        XCTAssertEqual(shell("/usr/bin/codesign", ["--verify", "--deep", "--strict", installed.path]), 0)
+    }
+}
