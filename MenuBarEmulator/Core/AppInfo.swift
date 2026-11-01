@@ -12,6 +12,9 @@ enum AppInfo {
     /// The tip jar.
     static let tipURL = "https://ko-fi.com/kian"
 
+    /// Launched by the test runner to host the tests: it shares the real settings, so it mustn't act like a real launch.
+    static var isTestHost: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
+
     static var version: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
     }

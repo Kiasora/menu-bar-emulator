@@ -87,7 +87,7 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
 
         if model.screen == .onboarding {
             DispatchQueue.main.async { self.show(.floating) }
-        } else {
+        } else if !AppInfo.isTestHost { // running the tests would otherwise mark What's New as seen in your real settings
             model.showWhatsNewIfUpdated()
         }
     }

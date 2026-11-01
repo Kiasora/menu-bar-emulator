@@ -1925,6 +1925,8 @@ final class NextExtrasTests: EmulatorTestCase {
         let fresh = makeModel(store: defaults()) // not onboarded: the tour shows instead
         fresh.showWhatsNewIfUpdated()
         XCTAssertNil(fresh.sheet)
+        XCTAssertTrue(AppInfo.isTestHost, "so the app hosting these tests leaves What's New alone")
+        XCTAssertNil(UserDefaults.standard.string(forKey: "MenuBarEmulator.lastVersion"), "and never marks it seen in the real settings")
     }
 
     @MainActor
