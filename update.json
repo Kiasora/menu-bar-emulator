@@ -1,7 +1,7 @@
 {
-  "version": "1.1",
-  "message": "save backups, ghost mode, drop a game on the menu bar icon to play it, shuffle, a crt filter and settings in tabs",
+  "version": "1.2",
+  "message": "3ds games (a one-time 7 mb download), 3ds save backups, and the top screen in jump back in",
   "url": "https://ko-fi.com/kian",
-  "download": "https://github.com/Kiasora/menu-bar-emulator/releases/download/v1.1/Menu-Bar-Emulator-1.1-macOS.zip",
-  "sha256": "247994f9b0fea68d9ebdd7267942ce91cf326c952ec8fd1408ba4c960a0695c1"
+  "download": "https://github.com/Kiasora/menu-bar-emulator/releases/download/v1.2/Menu-Bar-Emulator-1.2-macOS.zip",
+  "sha256": "55155c517d4e3ec3438530cdb133f6fb08fbf8d66369ac6830d092984822440a"
 }
