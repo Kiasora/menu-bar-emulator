@@ -69,6 +69,7 @@ final class ScreenView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         picture.contentsGravity = .resize
+        picture.autoresizingMask = [.layerWidthSizable, .layerHeightSizable] // follows the view even when it isn't told
         picture.magnificationFilter = .nearest
         picture.minificationFilter = .trilinear
         picture.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
@@ -104,6 +105,11 @@ final class ScreenView: NSView {
         fitPicture()
     }
 
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        fitPicture()
+    }
+
     private func fitPicture() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -129,6 +135,9 @@ final class ScreenView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         picture.contents = cropped
+        // Dragging the window's corner could leave the picture at an older, bigger size (Kian saw the 3DS screens spill
+        // past their views): every frame puts it back.
+        if picture.frame != bounds { picture.frame = bounds }
         CATransaction.commit()
     }
 

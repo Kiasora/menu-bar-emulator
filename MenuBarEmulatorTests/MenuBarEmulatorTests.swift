@@ -2053,6 +2053,71 @@ final class ThreeDSTests: EmulatorTestCase {
         XCTAssertEqual(try height("Game.gba"), 6)
     }
 
+    /// The picture can never be left at another size than its view (it spilled past the 3DS screens after a resize).
+    func testScreenPictureAlwaysMatchesItsView() throws {
+        let info = CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.noneSkipFirst.rawValue)
+        let image = try XCTUnwrap(CGImage(width: 4, height: 4, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 16,
+                                          space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info,
+                                          provider: CGDataProvider(data: Data(count: 64) as CFData)!, decode: nil,
+                                          shouldInterpolate: false, intent: .defaultIntent))
+        let view = ScreenView(frame: NSRect(x: 0, y: 0, width: 300, height: 200))
+        view.show(image)
+        XCTAssertEqual(view.picture.frame, view.bounds)
+        // The view's layer changing size by itself (without setFrameSize or layout) still carries the picture along.
+        view.layer?.bounds = CGRect(x: 0, y: 0, width: 200, height: 120)
+        XCTAssertEqual(view.picture.frame.size, CGSize(width: 200, height: 120))
+        // And if the picture ever ends up out of step anyway, the next frame puts it back.
+        view.picture.frame = CGRect(x: 0, y: 0, width: 500, height: 500)
+        view.show(image)
+        XCTAssertEqual(view.picture.frame, view.bounds)
+    }
+
+    /// The top screen fills the width and the touch screen sits centered under it, with black beside it, at every window
+    /// size (Kian saw the bottom screen stretched off to the right). Needs the 3DS fixtures.
+    @MainActor
+    func testThreeDSScreensFitTheWindow() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let zip = env["MENU_BAR_EMULATOR_3DS_ZIP"], let rom = env["MENU_BAR_EMULATOR_3DS_ROM"] else { throw XCTSkip("3DS fixtures") }
+        let library = Library(root: temp.appending(path: "Library"))
+        try ThreeDSSupport.install(zip: URL(filePath: zip), sha256: ThreeDSSupport.sha256, to: ThreeDSSupport(folder: library.coresFolder).coreFile)
+        let model = makeModel(library: library)
+        model.emulator.windowVisible = true
+        model.emulator.showingGame = true
+        model.play(URL(filePath: rom))
+        XCTAssertEqual(model.currentSystem, .n3ds)
+        let host = NSHostingView(rootView: GameSurface(model: model))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.orderOut(nil); model.emulator.stop() }
+        RunLoop.main.run(until: Date().addingTimeInterval(3))
+
+        // Animated, like the real window: growing and shrinking between sizes, ending small (the library is bigger).
+        for (size, animated) in [(NSSize(width: 500, height: 600), false), (NSSize(width: 368, height: 441.6), true),
+                                 (NSSize(width: 640, height: 768), true), (NSSize(width: 368, height: 441.6), true)] {
+            window.setFrame(window.frameRect(forContentRect: NSRect(origin: window.frame.origin, size: size)), display: true, animate: animated)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            let width = Int(size.width), height = Int(size.height)
+            var pixels = [UInt8](repeating: 0, count: width * height * 4)
+            let context = try XCTUnwrap(CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            let layer = try XCTUnwrap(host.layer)
+            layer.render(in: context)
+            // Row 0 of the bitmap is the bottom of the window (Core Graphics counts up).
+            func brightness(_ x: Double, fromTop y: Double) -> Int {
+                let px = Int(x * Double(width)), row = height - 1 - Int(y * Double(height)), i = (row * width + px) * 4
+                return Int(pixels[i]) + Int(pixels[i + 1]) + Int(pixels[i + 2])
+            }
+            XCTAssertGreaterThan(brightness(0.05, fromTop: 0.25), 60, "top screen fills the width at \(size)")
+            XCTAssertGreaterThan(brightness(0.95, fromTop: 0.25), 60, "top screen fills the width at \(size)")
+            XCTAssertGreaterThan(brightness(0.5, fromTop: 0.75), 30, "touch screen in the middle at \(size)")
+            for (x, y) in [(0.04, 0.55), (0.04, 0.9), (0.96, 0.55), (0.96, 0.9)] {
+                XCTAssertLessThan(brightness(x, fromTop: y), 30, "black beside the touch screen at (\(x), \(y)), \(size)")
+            }
+        }
+    }
+
     /// The real download from Azahar's GitHub release, checksum and all. Needs the network, so it's opt-in.
     func testDownloadsTheRealEmulatorFromAzahar() throws {
         guard ProcessInfo.processInfo.environment["MENU_BAR_EMULATOR_NETWORK_TESTS"] != nil else { throw XCTSkip("network test") }
