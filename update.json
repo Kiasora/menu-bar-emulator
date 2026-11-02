@@ -1,7 +1,7 @@
 {
-  "version": "1.2",
-  "message": "3ds games (a one-time 7 mb download), 3ds save backups, and the top screen in jump back in",
+  "version": "1.2.1",
+  "message": "fixes the 3ds bottom screen stretching after you resize the window",
   "url": "https://ko-fi.com/kian",
-  "download": "https://github.com/Kiasora/menu-bar-emulator/releases/download/v1.2/Menu-Bar-Emulator-1.2-macOS.zip",
-  "sha256": "55155c517d4e3ec3438530cdb133f6fb08fbf8d66369ac6830d092984822440a"
+  "download": "https://github.com/Kiasora/menu-bar-emulator/releases/download/v1.2.1/Menu-Bar-Emulator-1.2.1-macOS.zip",
+  "sha256": "1856e68b1b4b5dc0c51296393f0e160cea8dd2a13c8c67fbe60fa1fa95c75a07"
 }
