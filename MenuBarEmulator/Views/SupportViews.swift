@@ -452,14 +452,9 @@ struct WhatsNewSheet: View {
     @Environment(\.theme) private var theme
 
     private let items: [(symbol: String, title: String, detail: String)] = [
-        ("slider.horizontal.3", "Settings in tabs", "General, Play, Sound, Look and About, instead of one long list."),
-        ("clock.arrow.circlepath", "Save backups", "Your in-game saves are copied every 10 minutes. Right-click a game › Save Backups to restore one."),
-        ("eye.slash", "Ghost mode", "Pop out, then ⋯ › Ghost Mode: see-through, clicks go through. Your shortcut brings it back."),
-        ("arrow.down.app", "Drop to play", "Drop a game on the menu bar icon and it starts right away."),
-        ("shuffle", "Shuffle", "The shuffle button next to search plays a random game."),
-        ("tv", "CRT filter", "Scanlines for NES, SNES and Genesis, in Display."),
-        ("trophy.fill", "Milestones", "A little cheer at 1, 5, 10 hours and up in a game."),
-        ("wrench.and.screwdriver", "Fixes", "Sleep and lock now pause and save, game sound survives AirPods, Genesis .bin games import."),
+        ("rectangle.split.1x2", "3DS games", "Open one, or Settings › General › 3DS games: a one-time 7 MB download. Arrows are the Circle Pad, the mouse is the stylus."),
+        ("clock.arrow.circlepath", "3DS save backups", "3DS saves are backed up every 10 minutes too, and export or import as a zip."),
+        ("rectangle.topthird.inset.filled", "Top screen in Jump back in", "DS and 3DS games show their top screen there."),
     ]
 
     var body: some View {

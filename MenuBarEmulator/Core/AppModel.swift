@@ -252,7 +252,7 @@ final class AppModel {
     }
 
     /// The version the What's New card is about.
-    static let whatsNewVersion = "1.1"
+    static let whatsNewVersion = "1.2"
 
     /// After updating from an older version (not on a fresh install), show what's new once.
     func showWhatsNewIfUpdated() {
