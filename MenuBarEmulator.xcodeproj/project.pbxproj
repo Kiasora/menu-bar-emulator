@@ -13,6 +13,7 @@
 		C20000000000000000000004 /* bsnes.libretro in Copy Cores */ = {isa = PBXBuildFile; fileRef = C10000000000000000000004 /* bsnes.libretro */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		C20000000000000000000005 /* clownmdemu.libretro in Copy Cores */ = {isa = PBXBuildFile; fileRef = C10000000000000000000005 /* clownmdemu.libretro */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		C20000000000000000000006 /* gearsystem.libretro in Copy Cores */ = {isa = PBXBuildFile; fileRef = C10000000000000000000006 /* gearsystem.libretro */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		C20000000000000000000007 /* MoltenVK.vulkan in Copy Cores */ = {isa = PBXBuildFile; fileRef = C10000000000000000000007 /* MoltenVK.vulkan */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,6 +39,7 @@
 				C20000000000000000000004 /* bsnes.libretro in Copy Cores */,
 				C20000000000000000000005 /* clownmdemu.libretro in Copy Cores */,
 				C20000000000000000000006 /* gearsystem.libretro in Copy Cores */,
+				C20000000000000000000007 /* MoltenVK.vulkan in Copy Cores */,
 			);
 			name = "Copy Cores";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -53,6 +55,7 @@
 		C10000000000000000000004 /* bsnes.libretro */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = bsnes.libretro; sourceTree = "<group>"; };
 		C10000000000000000000005 /* clownmdemu.libretro */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = clownmdemu.libretro; sourceTree = "<group>"; };
 		C10000000000000000000006 /* gearsystem.libretro */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = gearsystem.libretro; sourceTree = "<group>"; };
+		C10000000000000000000007 /* MoltenVK.vulkan */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = MoltenVK.vulkan; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -114,6 +117,7 @@
 				C10000000000000000000004 /* bsnes.libretro */,
 				C10000000000000000000005 /* clownmdemu.libretro */,
 				C10000000000000000000006 /* gearsystem.libretro */,
+				C10000000000000000000007 /* MoltenVK.vulkan */,
 			);
 			path = BuiltCores;
 			sourceTree = "<group>";
@@ -392,6 +396,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.kian.MenuBarEmulator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/ThirdParty/Vulkan/include";
 				SWIFT_OBJC_BRIDGING_HEADER = "MenuBarEmulator/Core/MenuBarEmulator-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};
@@ -426,6 +431,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.kian.MenuBarEmulator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/ThirdParty/Vulkan/include";
 				SWIFT_OBJC_BRIDGING_HEADER = "MenuBarEmulator/Core/MenuBarEmulator-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 			};

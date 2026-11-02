@@ -19,6 +19,11 @@ cores/
 *.gbc
 *.gba
 *.nds
+*.3ds
+*.cci
+*.cxi
+*.3dsx
+*.cia
 *.srl
 *.rom
 *.sav

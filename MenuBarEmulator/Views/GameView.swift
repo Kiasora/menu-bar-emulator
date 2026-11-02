@@ -137,6 +137,16 @@ struct GameSurface: View {
             if model.currentSystem == .nds {
                 DSScreens(model: model, space: geo.size)
                     .frame(width: geo.size.width, height: geo.size.height)
+            } else if model.currentSystem == .n3ds {
+                // The top screen, and the narrower touch screen under it (the mouse is the stylus there).
+                let size = Self.fit(model.pictureSize, in: geo.size)
+                VStack(spacing: 0) {
+                    ScreenLayer(emulator: model.emulator, crop: .top, filter: display.filter, onDoubleClick: model.toggleFullScreen)
+                        .frame(width: size.width, height: size.height / 2)
+                    ScreenLayer(emulator: model.emulator, crop: .narrowBottom, filter: display.filter, touchScreen: true)
+                        .frame(width: size.width * 0.8, height: size.height / 2)
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
             } else {
                 let picture = model.pictureSize
                 let size = Self.fit(picture, in: geo.size)

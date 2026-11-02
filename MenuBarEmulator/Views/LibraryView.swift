@@ -422,9 +422,7 @@ private struct ResumeCard: View {
         .focusable(false)
         .onHover { hover in withAnimation(.easeOut(duration: 0.15)) { hovering = hover } }
         .task(id: model.emulator.stateVersion) {
-            thumbnail = model.emulator.game == rom
-                ? model.emulator.snapshot.map { NSImage(cgImage: $0, size: .zero) } ?? model.emulator.resumeThumbnail(for: rom)
-                : model.emulator.resumeThumbnail(for: rom)
+            thumbnail = model.emulator.continuePicture(for: rom)
         }
         .accessibilityLabel("Continue \(rom.gameTitle)")
     }

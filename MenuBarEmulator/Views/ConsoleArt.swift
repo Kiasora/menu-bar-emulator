@@ -14,6 +14,7 @@ struct ConsoleArt: View {
             case .gbc: art.gameBoy(body: 0x7B4BB8, bezel: 0x2C2B33, screen: [0x6FD3E8, 0xF2A6C8], buttons: 0x3A3942, color: true)
             case .gba: art.advance()
             case .nds: art.ds()
+            case .n3ds: art.threeDS()
             case .nes: art.nesPad()
             case .snes: art.snesPad()
             case .md: art.genesisPad()
@@ -150,6 +151,34 @@ private struct Art {
         circle(79, 68, 2.1, color(0x3A3C46)) // A
         circle(77, 82, 1.1, color(0x3A3C46))
         circle(77, 86, 1.1, color(0x3A3C46))
+    }
+
+    /// A red 3DS: wider top screen, Circle Pad above the D-pad.
+    func threeDS() {
+        let top = rect(14, 4, 72, 44)
+        let bottom = rect(14, 52, 72, 44)
+        shadow(top, radius: 5)
+        shadow(bottom, radius: 5)
+        fill(top, gradient(top, 0xE0525E, 0xB8323F), radius: 5)
+        fill(rect(16, 47, 68, 6), color(0x8E2430), radius: 2) // hinge
+        fill(bottom, gradient(bottom, 0xD94653, 0xAE2C39), radius: 5)
+
+        let ts = rect(22, 9, 56, 34)
+        fill(ts, color(0x22232B), radius: 2.5)
+        let tsi = ts.insetBy(dx: 2.2 * unit, dy: 2.2 * unit)
+        fill(tsi, gradient(tsi, 0x8EC5FF, 0xC8A6FF), radius: 1)
+
+        let bs = rect(35, 57, 30, 24)
+        fill(bs, color(0x22232B), radius: 2)
+        let bsi = bs.insetBy(dx: 1.8 * unit, dy: 1.8 * unit)
+        fill(bsi, gradient(bsi, 0xFFE3A3, 0xFFB3C1), radius: 0.8)
+
+        circle(24, 62, 4.2, color(0x3A3C46)) // Circle Pad
+        dpad(24, 78, 3.8, 0x3A3C46)
+        circle(76, 60, 1.9, color(0x3A3C46)) // X
+        circle(76, 67, 1.9, color(0x3A3C46)) // B
+        circle(72.5, 63.5, 1.9, color(0x3A3C46)) // Y
+        circle(79.5, 63.5, 1.9, color(0x3A3C46)) // A
     }
 
     // Home consoles are drawn as their controllers, the part everyone remembers.

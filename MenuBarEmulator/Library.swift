@@ -10,6 +10,8 @@ final class Library {
     static let patchExtensions: Set<String> = ["ips", "ups", "bps"]
 
     let root: URL
+    /// Emulators downloaded after installing (the 3DS one).
+    var coresFolder: URL { root.appending(path: "Cores") }
     private(set) var roms: [URL] = []
     private(set) var bios: [URL] = []
     /// Keyed by ROM file name.
@@ -301,6 +303,7 @@ struct Cheat: Codable, Identifiable, Equatable {
 /// The console a ROM is for, from its file extension. Raw values are saved (window scale per system), so keep them.
 enum GameSystem: String, CaseIterable, Identifiable {
     case gb, gbc, gba, nds, nes, snes, md, sms, gg
+    case n3ds = "3ds"
 
     var id: String { rawValue }
 
@@ -315,11 +318,12 @@ enum GameSystem: String, CaseIterable, Identifiable {
         switch self {
         case .snes: ["sfc", "smc"]
         case .md: ["md", "gen"]
+        case .n3ds: ["3ds", "cci", "cxi", "3dsx"]
         default: [rawValue]
         }
     }
 
-    /// The libretro core in the app bundle that plays it.
+    /// The libretro core that plays it: in the app bundle, or downloaded (3DS, see `ThreeDSSupport`).
     var core: String {
         switch self {
         case .gb, .gbc, .gba: "mgba"
@@ -328,6 +332,7 @@ enum GameSystem: String, CaseIterable, Identifiable {
         case .snes: "bsnes"
         case .md: "clownmdemu"
         case .sms, .gg: "gearsystem"
+        case .n3ds: "azahar"
         }
     }
 
@@ -341,6 +346,7 @@ enum GameSystem: String, CaseIterable, Identifiable {
         case .snes: CGSize(width: 256, height: 224)
         case .md: CGSize(width: 320, height: 224)
         case .sms: CGSize(width: 256, height: 192)
+        case .n3ds: CGSize(width: 400, height: 480)
         }
     }
 
@@ -355,6 +361,7 @@ enum GameSystem: String, CaseIterable, Identifiable {
         case .md: "Genesis"
         case .sms: "SMS"
         case .gg: "GG"
+        case .n3ds: "3DS"
         }
     }
 
@@ -369,6 +376,7 @@ enum GameSystem: String, CaseIterable, Identifiable {
         case .md: "Sega Genesis"
         case .sms: "Sega Master System"
         case .gg: "Sega Game Gear"
+        case .n3ds: "Nintendo 3DS"
         }
     }
 
@@ -383,6 +391,7 @@ enum GameSystem: String, CaseIterable, Identifiable {
         case .md: 0x3D4255
         case .sms: 0x2F6FB8
         case .gg: 0x2E9C8F
+        case .n3ds: 0xC9424F
         }
     }
 }

@@ -1,5 +1,6 @@
 #!/bin/zsh
 # Downloads pinned emulator core sources (mGBA, melonDS DS, FCEUmm, bsnes, Gearsystem, clownmdemu) without their ROM/save test folders, then builds them into BuiltCores/.
+# Also fetches MoltenVK, which the 3DS emulator draws through (that emulator itself is a download inside the app).
 # Needs: brew install cmake ninja. Delete the relevant cores/ subfolder before changing a pinned revision.
 set -e
 cd "$(dirname "$0")"
@@ -55,4 +56,15 @@ cp cores/bsnes/bsnes/out/bsnes_libretro.dylib BuiltCores/bsnes.libretro
 strip -S -x BuiltCores/bsnes.libretro # its debug map lists every build folder path
 cp cores/gearsystem/platforms/libretro/gearsystem_libretro.dylib BuiltCores/gearsystem.libretro
 cp $B/clownmdemu/clownmdemu_libretro.dylib BuiltCores/clownmdemu.libretro
+# MoltenVK (Vulkan on Metal), Khronos's own release, checked against its checksum.
+if [[ ! -f cores/MoltenVK.dylib ]]; then
+  curl -fL https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar -o cores/MoltenVK-macos.tar
+  echo "f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e  cores/MoltenVK-macos.tar" | shasum -a 256 -c
+  tar -xf cores/MoltenVK-macos.tar -C cores MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib
+  lipo -thin arm64 cores/MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib -output cores/MoltenVK.dylib
+  rm -rf cores/MoltenVK-macos.tar cores/MoltenVK
+fi
+# Not .dylib: Xcode would link it into the app instead of copying it.
+cp cores/MoltenVK.dylib BuiltCores/MoltenVK.vulkan
+codesign -f -s - BuiltCores/MoltenVK.vulkan
 echo "Cores copied to BuiltCores/"

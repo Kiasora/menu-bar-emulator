@@ -578,7 +578,7 @@ private struct OpenGameTile: View {
         .contextMenu { Button("Close Game") { model.closeGame(rom) } }
         .padFocusable("open-\(number)", cornerRadius: 11, action: open)
         .task(id: model.emulator.stateVersion) {
-            thumbnail = current ? model.emulator.snapshot.map { NSImage(cgImage: $0, size: .zero) } : model.emulator.resumeThumbnail(for: rom)
+            thumbnail = model.emulator.continuePicture(for: rom)
         }
     }
 

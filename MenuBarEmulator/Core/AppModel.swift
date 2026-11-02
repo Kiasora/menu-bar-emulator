@@ -17,6 +17,8 @@ final class AppModel {
         case saveBackups(URL)
         /// What's new, once, after updating.
         case whatsNew
+        /// Download the 3DS emulator, then play `rom` if there is one.
+        case threeDS(URL?)
     }
     enum SettingsPage: Hashable { case main, controls }
     enum SettingsTab: String, CaseIterable, Hashable {
@@ -37,6 +39,7 @@ final class AppModel {
     let lofi = LofiPlayer()
     let updates = UpdateChecker()
     let updater = AppUpdater()
+    let threeDS: ThreeDSSupport
     /// The window is up and not covered (set by the window). Unlike `emulator.windowVisible`, never true while hidden.
     var windowOnScreen = false
     let display: Display
@@ -111,6 +114,7 @@ final class AppModel {
         self.themes = themes
         self.gamepad = gamepad
         self.store = store
+        threeDS = ThreeDSSupport(folder: library.coresFolder)
         screen = store.bool(forKey: "MenuBarEmulator.onboarded") ? .library : .onboarding
         openGames = (store.stringArray(forKey: "MenuBarEmulator.openGames") ?? [])
             .map { library.root.appending(path: "ROMs").appending(path: $0) }
@@ -176,6 +180,7 @@ final class AppModel {
     var pictureSize: CGSize {
         guard let system = currentSystem else { return CGSize(width: 240, height: 160) }
         if system == .nds { return display.dsLayout().size }
+        if system == .n3ds { return system.screenSize } // its frames come at twice that, for sharpness
         return emulator.frameSize ?? system.screenSize
     }
 
@@ -221,6 +226,7 @@ final class AppModel {
     // MARK: Actions
 
     func play(_ rom: URL) {
+        if GameSystem(rom: rom) == .n3ds && !threeDS.isInstalled { return sheet = .threeDS(rom) }
         if emulator.game != rom { emulator.play(rom) }
         guard emulator.game == rom else {
             show(emulator.error ?? "Couldn't start that game", "exclamationmark.triangle.fill")
@@ -447,7 +453,8 @@ final class AppModel {
     }
 
     func exportSave(for rom: URL) {
-        guard let destination = pickSaveDestination("\(rom.gameTitle).sav") else { return }
+        // A 3DS save is a folder of files, so it travels as a zip.
+        guard let destination = pickSaveDestination("\(rom.gameTitle).\(GameSystem(rom: rom) == .n3ds ? "zip" : "sav")") else { return }
         do {
             try emulator.exportSave(for: rom, to: destination)
             show("Save exported", "square.and.arrow.up.fill")
@@ -457,7 +464,10 @@ final class AppModel {
     }
 
     func importSave(for rom: URL) {
-        guard let source = pickFiles("Choose a save file (.sav, .srm) for \(rom.gameTitle)", ["sav", "srm", "dsv", "bin"]).first else { return }
+        let picked = GameSystem(rom: rom) == .n3ds
+            ? pickFiles("Choose a 3DS save (a .zip of its save folder) for \(rom.gameTitle)", ["zip"])
+            : pickFiles("Choose a save file (.sav, .srm) for \(rom.gameTitle)", ["sav", "srm", "dsv", "bin"])
+        guard let source = picked.first else { return }
         do {
             try emulator.importSave(from: source, for: rom)
             show("Save imported", "square.and.arrow.down.fill")

@@ -171,7 +171,7 @@ final class FloatingWindow: NSObject, NSWindowDelegate {
         case .gb, .gbc, .gg: 3
         case .gba: 2
         case .nds, .nes, .snes, .sms: 1.5
-        case .md: 1.25
+        case .md, .n3ds: 1.25
         }
     }
 

@@ -488,3 +488,56 @@ struct WhatsNewSheet: View {
         }
     }
 }
+
+/// 3DS games need the 3DS emulator, a separate one-time download. Starts the game you opened once it's in.
+struct ThreeDSSheet: View {
+    let model: AppModel
+    let rom: URL?
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        SheetCard(title: "Play 3DS Games", close: { model.sheet = nil }) {
+            Text("3DS games need one more thing: the 3DS emulator (Azahar, \(ThreeDSSupport.downloadSize)). It downloads straight from Azahar's GitHub, and only once.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(theme.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Games have to be decrypted copies of your own 3DS games (.3ds, .cci, .cxi or .3dsx). The arrow keys are the Circle Pad, and the mouse is the stylus on the bottom screen.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(theme.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+            switch model.threeDS.state {
+            case .downloading(let fraction):
+                ProgressView(value: fraction)
+            case .installed:
+                button(rom.map { "Play \($0.gameTitle)" } ?? "Done", id: "three-ds-done", action: finish)
+            case .failed(let message):
+                Text(message).font(.system(size: 11)).foregroundStyle(theme.bad)
+                button("Try Again", id: "three-ds-download", action: download)
+            case .notInstalled:
+                button("Download", id: "three-ds-download", action: download)
+            }
+        }
+    }
+
+    private func button(_ title: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .buttonStyle(PillButtonStyle())
+            .focusable(false)
+            .keyboardShortcut(.defaultAction)
+            .padFocusable(id, cornerRadius: 15, action: action)
+            .frame(maxWidth: .infinity)
+    }
+
+    private func download() {
+        model.threeDS.install { [model, rom] in
+            if model.sheet == .threeDS(rom) { finish(model: model, rom: rom) } // only if you're still waiting on it
+        }
+    }
+
+    private func finish() { finish(model: model, rom: rom) }
+
+    private func finish(model: AppModel, rom: URL?) {
+        model.sheet = nil
+        if let rom { model.play(rom) }
+    }
+}

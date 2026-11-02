@@ -86,6 +86,7 @@ struct RootView: View {
                 case .supporter: SupporterSheet(model: model)
                 case .saveBackups(let rom): SaveBackupsSheet(model: model, rom: rom)
                 case .whatsNew: WhatsNewSheet(model: model)
+                case .threeDS(let rom): ThreeDSSheet(model: model, rom: rom)
                 }
             }
             .transition(.scale(scale: 0.94).combined(with: .opacity))

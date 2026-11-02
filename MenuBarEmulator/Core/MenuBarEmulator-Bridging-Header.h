@@ -2,3 +2,6 @@
 
 // Swift can't define C variadic functions, so the core's log callback lives in LibretroLog.c.
 retro_log_printf_t host_log_callback(void);
+
+// Vulkan cores (3DS) drawing through MoltenVK, see VulkanBridge.c.
+#include "VulkanBridge.h"

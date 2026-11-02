@@ -5,7 +5,8 @@ import QuartzCore
 /// SwiftUI never re-renders per frame. `crop` picks one DS screen out of the core's top-over-bottom frame; the bottom
 /// DS screen also takes the mouse as the stylus. Clicking anywhere else on the picture drags the window.
 struct ScreenLayer: NSViewRepresentable {
-    enum Crop { case full, top, bottom }
+    /// `narrowBottom` is the 3DS touch screen: 320 wide under the 400-wide top screen, so the bars beside it go.
+    enum Crop { case full, top, bottom, narrowBottom }
 
     let emulator: Emulator
     var crop: Crop = .full
@@ -122,6 +123,7 @@ final class ScreenView: NSView {
         case .full: image
         case .top: image.cropping(to: CGRect(x: 0, y: 0, width: image.width, height: half))
         case .bottom: image.cropping(to: CGRect(x: 0, y: half, width: image.width, height: half))
+        case .narrowBottom: image.cropping(to: CGRect(x: image.width / 10, y: half, width: image.width * 8 / 10, height: half))
         }
         current = cropped
         CATransaction.begin()
@@ -290,6 +292,7 @@ final class ScreenView: NSView {
 
     static func normalizedTouch(_ point: CGPoint, in size: CGSize, crop: ScreenLayer.Crop) -> CGPoint {
         let x = size.width > 0 ? point.x / size.width : 0, y = size.height > 0 ? point.y / size.height : 0
+        if crop == .narrowBottom { return CGPoint(x: 0.1 + x * 0.8, y: 0.5 + y / 2) }
         return CGPoint(x: x, y: (crop == .top ? 0 : 0.5) + y / 2)
     }
 }

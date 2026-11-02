@@ -131,6 +131,12 @@ private struct MainSettings: View {
                         .focusable(false)
                 }
                 .padFocusable("import", cornerRadius: 8) { model.importFiles() }
+                SettingsRow(title: "3DS games", subtitle: threeDSStatus) {
+                    Button(model.threeDS.isInstalled ? "Remove" : "Set Up…", action: threeDSAction)
+                        .buttonStyle(PillButtonStyle(kind: .secondary))
+                        .focusable(false)
+                }
+                .padFocusable("three-ds", cornerRadius: 8, action: threeDSAction)
                 ToggleRow(title: "Box art", subtitle: "Downloads covers from libretro-thumbnails. Right-click a game to use your own picture.",
                           isOn: Binding { model.covers.enabled } set: { model.covers.enabled = $0 }, padID: "box-art")
             }
@@ -151,7 +157,7 @@ private struct MainSettings: View {
                     }
                     SpeedSlider(emulator: emulator, padID: "ff-speed")
                 }
-                ToggleRow(title: "Rewind", subtitle: "Hold \(key(.rewind)) in any game but DS",
+                ToggleRow(title: "Rewind", subtitle: "Hold \(key(.rewind)) in any game but DS and 3DS",
                           isOn: Binding { emulator.rewindEnabled } set: { emulator.rewindEnabled = $0 }, padID: "rewind")
             }
             SettingsGroup(title: "Controls", footer: "Any controller works: Xbox, PlayStation, Switch Pro, MFi. Right trigger fast-forwards, left trigger rewinds; Home, a stick click or Start + Select opens the game menu, and it drives every menu too.") {
@@ -301,6 +307,19 @@ private struct MainSettings: View {
     private func quit() {
         model.emulator.stop()
         NSApp.terminate(nil)
+    }
+
+    private var threeDSStatus: String {
+        switch model.threeDS.state {
+        case .notInstalled: "Needs the 3DS emulator, a one-time \(ThreeDSSupport.downloadSize) download"
+        case .downloading(let fraction): "Downloading… \(Int(fraction * 100))%"
+        case .installed: "Ready (Azahar \(ThreeDSSupport.version))"
+        case .failed(let message): message
+        }
+    }
+
+    private func threeDSAction() {
+        if model.threeDS.isInstalled { model.threeDS.remove() } else { model.sheet = .threeDS(nil) }
     }
 
     private func linkRow(_ title: String, symbol: String, id: String, destructive: Bool = false, action: @escaping () -> Void) -> some View {

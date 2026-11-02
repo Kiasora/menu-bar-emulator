@@ -114,7 +114,7 @@ final class AppUpdater {
     }
 
     @discardableResult
-    private static func run(_ tool: String, _ arguments: [String]) -> Bool {
+    static func run(_ tool: String, _ arguments: [String]) -> Bool {
         let process = Process()
         process.executableURL = URL(filePath: tool)
         process.arguments = arguments
